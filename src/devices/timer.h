@@ -3,9 +3,18 @@
 
 #include <round.h>
 #include <stdint.h>
+#include "threads/synch.h"
 
 /* Number of timer interrupts per second. */
 #define TIMER_FREQ 100
+
+/* Struct used by the no-busy-wait implementation of timer_sleep */
+struct thread_sleep {
+    struct list_elem sleep_status;  /* List element for sleeping_threads*/
+    int64_t asleep_ticks;           /* Timer tick the thread will wake up on*/
+    struct semaphore sema;          /* Semaphore to block the thread*/
+};
+
 
 void timer_init (void);
 void timer_calibrate (void);
