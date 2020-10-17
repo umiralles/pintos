@@ -69,7 +69,6 @@ static struct thread *next_thread_to_run (void);
 static void init_thread (struct thread *, const char *name, int priority);
 static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
-static list_less_func cmp_priority;
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
@@ -259,7 +258,12 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  if(t != idle_thread){
+    list_push_back (&ready_list, &t->elem);
+  }
+  if(t->priority > thread_current()->priority){
+    thread_yield();
+  }
   //printf("adding thread %d: priority %d\n", t->tid, t->priority);
   t->status = THREAD_READY;
   intr_set_level (old_level);
@@ -510,12 +514,12 @@ alloc_frame (struct thread *t, size_t size)
   return t->stack;
 }
 
-static bool cmp_priority(const struct list_elem *a,
+bool cmp_priority(const struct list_elem *a,
 			 const struct list_elem *b, void *aux UNUSED) {
   int priority_a = list_entry(a, struct thread, elem)->priority;
   int priority_b = list_entry(b, struct thread, elem)->priority;
 
-  return priority_a <= priority_b;
+  return priority_a < priority_b;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
