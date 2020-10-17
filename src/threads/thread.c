@@ -53,6 +53,8 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
+static int max_priority;        /* Current maximum priority of the
+				   ready threads. */
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -67,6 +69,7 @@ static struct thread *next_thread_to_run (void);
 static void init_thread (struct thread *, const char *name, int priority);
 static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
+static list_less_func cmp_priority;
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
@@ -351,6 +354,10 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+
+  if (new_priority > max_priority) {
+    thread_yield();
+  }
 }
 
 /* Returns the current thread's priority. */
@@ -497,6 +504,14 @@ alloc_frame (struct thread *t, size_t size)
   return t->stack;
 }
 
+static bool cmp_priority(const struct list_elem *a,
+			 const struct list_elem *b, void *aux UNUSED) {
+  int priority_a = list_entry(a, struct thread, elem)->priority;
+  int priority_b = list_entry(b, struct thread, elem)->priority;
+
+  return priority_a <= priority_b;
+}
+
 /* Chooses and returns the next thread to be scheduled.  Should
    return a thread from the run queue, unless the run queue is
    empty.  (If the running thread can continue running, then it
@@ -505,10 +520,19 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  if (list_empty (&ready_list))
+  if (list_empty (&ready_list)) {
     return idle_thread;
-  else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+  } else {
+    struct list_elem *next_elem = list_max(&ready_list, cmp_priority,
+					  NULL);
+    struct thread *next = list_entry(next_elem, struct thread, elem);
+    
+    list_remove(next_elem);
+    list_push_front(&ready_list, next_elem);
+
+    max_priority = next->priority;
+    return next;
+  }
 }
 
 /* Completes a thread switch by activating the new thread's page
