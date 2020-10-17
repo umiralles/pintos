@@ -234,7 +234,9 @@ thread_block (void)
   ASSERT (!intr_context ());
   ASSERT (intr_get_level () == INTR_OFF);
 
+  printf("removing thread %d: priority %d\n", thread_current()->tid, thread_current()->priority);
   thread_current ()->status = THREAD_BLOCKED;
+  
   schedule ();
 }
 
@@ -256,6 +258,7 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&ready_list, &t->elem);
+  printf("adding thread %d: priority %d\n", t->tid, t->priority);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -308,6 +311,7 @@ thread_exit (void)
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
+  printf("exiting thread %d: priority %d\n", thread_current()->tid, thread_current()->priority);
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
   schedule ();
@@ -355,7 +359,7 @@ thread_set_priority (int new_priority)
 {
   thread_current ()->priority = new_priority;
 
-  if (new_priority > max_priority) {
+  if (new_priority >= max_priority) {
     thread_yield();
   }
 }
@@ -509,7 +513,7 @@ static bool cmp_priority(const struct list_elem *a,
   int priority_a = list_entry(a, struct thread, elem)->priority;
   int priority_b = list_entry(b, struct thread, elem)->priority;
 
-  return priority_a <= priority_b;
+  return priority_a < priority_b;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -528,7 +532,7 @@ next_thread_to_run (void)
     struct thread *next = list_entry(next_elem, struct thread, elem);
     
     list_remove(next_elem);
-    list_push_front(&ready_list, next_elem);
+    list_push_back(&ready_list, next_elem);
 
     max_priority = next->priority;
     return next;
@@ -594,6 +598,8 @@ schedule (void)
   struct thread *cur = running_thread ();
   struct thread *next = next_thread_to_run ();
   struct thread *prev = NULL;
+
+  printf("next thread: %d, priority %d\n", next->tid, next->priority);
 
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (cur->status != THREAD_RUNNING);
