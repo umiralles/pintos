@@ -258,15 +258,13 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  if(t != idle_thread){
-    list_push_back (&ready_list, &t->elem);
-  }
-  if(t->priority > thread_current()->priority){
-    thread_yield();
-  }
+  list_push_back (&ready_list, &t->elem); 
   //printf("adding thread %d: priority %d\n", t->tid, t->priority);
   t->status = THREAD_READY;
   intr_set_level (old_level);
+  if(!(thread_current() == idle_thread) && t->priority > thread_current()->priority){
+     thread_yield();
+  }
 }
 
 /* Returns the name of the running thread. */
@@ -365,8 +363,12 @@ thread_set_priority (int new_priority)
 {
   thread_current ()->priority = new_priority;
 
-  if (new_priority >= max_priority) {
-    thread_yield();
+  if(!list_empty(&ready_list)) {
+    struct list_elem *max_thread_elem = list_max(&ready_list, cmp_priority, NULL);
+    struct thread *max_thread = list_entry(max_thread_elem, struct thread, elem);
+    if(max_thread->priority > new_priority) {
+      thread_yield();
+    }
   }
 }
 

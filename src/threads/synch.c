@@ -117,7 +117,7 @@ sema_up (struct semaphore *sema)
     struct list_elem *max_thread_elem = list_max(&sema->waiters, cmp_priority, NULL);
     struct thread *max_thread = list_entry(max_thread_elem, struct thread, elem);
     list_remove(max_thread_elem);
-    thread_unblock(max_thread);
+    thread_unblock(max_thread); 
   }
   sema->value++;
   intr_set_level (old_level);
