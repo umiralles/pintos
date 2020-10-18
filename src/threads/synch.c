@@ -63,16 +63,17 @@ sema_down (struct semaphore *sema)
   enum intr_level old_level;
 
   ASSERT (sema != NULL);
-  ASSERT (!intr_context ());
+  ASSERT (!intr_context());
 
-  old_level = intr_disable ();
+  old_level = intr_disable();
   while (sema->value == 0) 
     {
-      list_push_back (&sema->waiters, &thread_current ()->elem);
-      thread_block ();
+      list_insert_ordered(&sema->waiters, &thread_current()->elem,
+			  cmp_priority, NULL);
+      thread_block();
     }
   sema->value--;
-  intr_set_level (old_level);
+  intr_set_level(old_level);
 }
 
 /* Down or "P" operation on a semaphore, but only if the
@@ -114,9 +115,9 @@ sema_up (struct semaphore *sema)
 
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters)){ 
-    struct list_elem *max_thread_elem = list_max(&sema->waiters, cmp_priority, NULL);
-    struct thread *max_thread = list_entry(max_thread_elem, struct thread, elem);
-    list_remove(max_thread_elem);
+    struct thread *max_thread = list_entry(list_front(&sema->waiters),
+					   struct thread, elem);
+    list_pop_front(&sema->waiters);
     thread_unblock(max_thread); 
   }
   sema->value++;
