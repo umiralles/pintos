@@ -197,7 +197,6 @@ thread_create (const char *name, int priority,
      Do this atomically so intermediate values for the 'stack' 
      member cannot be observed. */
   old_level = intr_disable ();
-  //printf("next thread: %d, priority %d\n", next->tid, next->priority);
 
 
   /* Stack frame for kernel_thread(). */
@@ -235,7 +234,6 @@ thread_block (void)
   ASSERT (!intr_context ());
   ASSERT (intr_get_level () == INTR_OFF);
 
-  //printf("removing thread %d: priority %d\n", thread_current()->tid, thread_current()->priority);
   thread_current ()->status = THREAD_BLOCKED;
   
   schedule ();
@@ -258,8 +256,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem); 
-  //printf("adding thread %d: priority %d\n", t->tid, t->priority);
+  list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
   if(!(thread_current() == idle_thread) && t->priority > thread_current()->priority){
@@ -315,7 +312,6 @@ thread_exit (void)
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
-  //printf("exiting thread %d: priority %d\n", thread_current()->tid, thread_current()->priority);
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
   schedule ();
@@ -602,7 +598,6 @@ static void
 schedule (void) 
 {
   struct thread *cur = running_thread ();
-  //printf("next thread: %d, priority %d\n", cur->tid, cur->priority);
   struct thread *next = next_thread_to_run ();
   struct thread *prev = NULL;
 
