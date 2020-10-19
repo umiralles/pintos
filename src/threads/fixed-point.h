@@ -50,12 +50,12 @@ typedef int32_t fixed_point_number;
 /* Adds a fixed point number and an integer by converting the integer to a 
    fixed point number */
 #define FP_ADD_INT(x, n) \
-  FP_ADD(x, INT_TO_FIXED_POINT(n))
+  FP_ADD(x, INT_TO_FP(n))
 
 /* Subtracts an integer froma fixed point number by conberting the integer
    to a fixed point number */
 #define FP_SUB_INT(x, n) \
-  FP_SUB(x, INT_TO_FIXED_POINT(n))
+  FP_SUB(x, INT_TO_FP(n))
 
 /* Multiplies two fixed point numbers by using a 64 bit int to store the result
    and dividing by the value 1 to get back to 32 bits */

@@ -15,7 +15,6 @@
 #include "userprog/process.h"
 #endif
 
-#include "threads/fixed-point.h"
 #include "devices/timer.h"
 
 /* Random value for struct thread's `magic' member.
@@ -80,6 +79,8 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+static thread_action_func calc_recent_cpu;
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -110,6 +111,8 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  initial_thread->nice = 0;                 /* Initially 0 niceness */
+  initial_thread->recent_cpu = 0;           /* Initially 0 CPU useage */
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -136,6 +139,17 @@ threads_ready (void)
   return list_size (&ready_list);      
 }
 
+/* Calculates the recent_cpu for a given thread t.
+   fixed_point_number temp is used as a temporary variable for
+   readability */
+static void calc_recent_cpu(struct thread *t, void *aux UNUSED) {
+  fixed_point_number temp;
+
+  temp = FP_MUL_INT(FP_MUL(load_avg, t->recent_cpu), 2);
+  temp = FP_DIV(temp, FP_ADD_INT(FP_MUL_INT(load_avg, 2), 1));
+  t->recent_cpu = FP_ADD_INT(temp, t->nice);
+}
+
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
 void
@@ -157,6 +171,7 @@ thread_tick (void)
   if (timer_ticks() % TIMER_FREQ == 0) {
     load_avg = FP_ADD(FP_DIV_INT(FP_MUL_INT(load_avg, 59), 60),
 		      FP_DIV_INT(INT_TO_FP(threads_ready()), 60));
+    thread_foreach(&calc_recent_cpu, NULL);
   }
 
   /* Enforce preemption. */
@@ -208,7 +223,9 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
-
+  t->nice = thread_current()->nice;
+  t->recent_cpu = thread_current()->recent_cpu;
+  
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack' 
      member cannot be observed. */
