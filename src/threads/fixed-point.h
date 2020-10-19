@@ -61,7 +61,7 @@ typedef int32_t fixed_point_number;
    and dividing by the value 1 to get back to 32 bits */
 #define FP_MUL(x, y) \
   (fixed_point_number) \
-  FP_ONE_DIV(((int64_t) x) * (fixed_point_number) y)
+  FP_ONE_DIV(((int64_t) x) * ((int64_t) y))
 
 /* Multiplies a fixed point number by an int */
 #define FP_MUL_INT(x, n) \

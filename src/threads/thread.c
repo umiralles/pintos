@@ -145,8 +145,9 @@ threads_ready (void)
 static void calc_recent_cpu(struct thread *t, void *aux UNUSED) {
   fixed_point_number temp;
 
-  temp = FP_MUL_INT(FP_MUL(load_avg, t->recent_cpu), 2);
-  temp = FP_DIV(temp, FP_ADD_INT(FP_MUL_INT(load_avg, 2), 1));
+  temp = FP_MUL_INT(load_avg, 2);
+  temp = FP_DIV(temp, FP_ADD_INT(temp, 1));
+  temp = FP_MUL(temp, t->recent_cpu);
   t->recent_cpu = FP_ADD_INT(temp, t->nice);
 }
 
@@ -167,10 +168,16 @@ thread_tick (void)
   else
     kernel_ticks++;
 
+  if (t != idle_thread) {
+    t->recent_cpu = FP_ADD_INT(t->recent_cpu, 1);
+  }
+  
   /* Update load_avg and recent_cpu on each second */
   if (timer_ticks() % TIMER_FREQ == 0) {
+    int ready_threads = (t == idle_thread)
+      ? threads_ready() : threads_ready() + 1;
     load_avg = FP_ADD(FP_DIV_INT(FP_MUL_INT(load_avg, 59), 60),
-		      FP_DIV_INT(INT_TO_FP(threads_ready()), 60));
+		      FP_DIV_INT(INT_TO_FP(ready_threads), 60));
     thread_foreach(&calc_recent_cpu, NULL);
   }
 
@@ -435,8 +442,7 @@ thread_get_load_avg (void)
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return FP_TO_INT(FP_MUL_INT(thread_current()->recent_cpu, 100));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -449,7 +455,7 @@ thread_get_recent_cpu (void)
    ready list.  It is returned by next_thread_to_run() as a
    special case when the ready list is empty. */
 static void
-idle (void *idle_started_ UNUSED) 
+idle (void *idle_started_ UNUSED)
 {
   struct semaphore *idle_started = idle_started_;
   idle_thread = thread_current ();
