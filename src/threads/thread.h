@@ -103,22 +103,22 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
   };
 
-/* Represents a donation of priority. */
-struct donation {
-  origin *origin;			/* The thread or donation from which
-					   the donation originates. */
-  list_elem recipient;			/* The thread that receives 
-					   the donation. */
-  lock *resource;			/* The lock the donor is waiting on. */
-  bool from_thread;			/* Is true if the origin is a thread. */
-}
-
 /* Represents the donor of a priority donation can be either a thread
-   or another donation (nested donations). */
+   or another donation (nested donations) */
 union origin {
-  thread *thread;
-  donation donation;
-}
+  struct thread *thread;
+  struct donation *donation;
+};
+
+/* Represents a donation of priority */
+struct donation {
+  union origin *origin;			/* The thread or donation from which
+					   the donation originates */
+  struct list_elem recipient;		/* The thread that receives 
+					   the donation */
+  struct lock *resource;		/* The lock the donor is waiting on */
+  bool from_thread;			/* Is true if the origin is a thread */
+};
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -160,4 +160,5 @@ list_less_func cmp_priority;
 
 /* Donations function. */
 void donation_init(struct donation *donation, struct lock *lock);
+void donation_grant(struct donation *donation);
 #endif /* threads/thread.h */

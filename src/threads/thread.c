@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -34,7 +35,7 @@ static struct thread *idle_thread;
 /* Initial thread, the thread running init.c:main(). */
 static struct thread *initial_thread;
 
-/* Lock used by allocate_tid(). */
+/* Lock used by allocate_tid	(). */
 static struct lock tid_lock;
 
 /* Stack frame for kernel_thread(). */
@@ -197,7 +198,6 @@ thread_create (const char *name, int priority,
      Do this atomically so intermediate values for the 'stack' 
      member cannot be observed. */
   old_level = intr_disable ();
-
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -492,6 +492,7 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  list_init(&t->donations_list);
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
@@ -628,9 +629,31 @@ allocate_tid (void)
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-void donation_init(struct donation *donation, struct lock *lock){
+void donation_init(struct donation *donation, struct lock *lock) {
   donation = malloc(sizeof(struct donation));
   donation->origin = malloc(sizeof(union origin));
-  donation->recipient = lock->holder;
   donation->resource = lock;
+}
+
+/* Not thread safe */
+void donation_grant(struct donation *donation) {
+
+  /* Set recipient's priority to the donor's priority - 
+     through the lock in donation */
+
+  struct thread *receiving = donation->resource->holder;
+  receiving->priority = donation->origin->priority;
+
+  /* If the high priority thread donates to a medium priority thread and this 
+     medium thread is waiting on a lock which is held by a low priority thread 
+     (medium must have donated to this low before) the high thread will donate 
+     to the low thread as well  */ 
+
+  for (e = list_begin (receiving->donations_list);
+       e != list_end (receiving->donations_list);
+       e = list_next (e))
+    {
+      struct donation *d = list_entry (e, struct donation, recipient);      
+    }
+  
 }
