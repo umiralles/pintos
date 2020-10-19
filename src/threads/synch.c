@@ -200,6 +200,13 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  if(lock->holder && lock->holder->priority < thread_get_priority()) {
+    struct donation *donation;
+    donation_init(donation, &lock);
+    donation->origin = thread_current();
+    list_push_back(&thread_current()->donations_list, donation->recipient);
+    donation_grant(donation);
+  }  
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
 }

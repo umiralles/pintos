@@ -89,6 +89,7 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
+    struct list donations_list;		/* Donations the thread received. */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -101,6 +102,23 @@ struct thread
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
+
+/* Represents a donation of priority. */
+struct donation {
+  origin *origin;			/* The thread or donation from which
+					   the donation originates. */
+  list_elem recipient;			/* The thread that receives 
+					   the donation. */
+  lock *resource;			/* The lock the donor is waiting on. */
+  bool from_thread;			/* Is true if the origin is a thread. */
+}
+
+/* Represents the donor of a priority donation can be either a thread
+   or another donation (nested donations). */
+union origin {
+  thread *thread;
+  donation donation;
+}
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -139,4 +157,7 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 list_less_func cmp_priority;
+
+/* Donations function. */
+void donation_init(struct donation *donation, struct lock *lock);
 #endif /* threads/thread.h */

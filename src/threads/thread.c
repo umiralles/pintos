@@ -627,3 +627,10 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+void donation_init(struct donation *donation, struct lock *lock){
+  donation = malloc(sizeof(struct donation));
+  donation->origin = malloc(sizeof(union origin));
+  donation->recipient = lock->holder;
+  donation->resource = lock;
+}
