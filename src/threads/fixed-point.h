@@ -2,7 +2,7 @@
 #define THREADS_FIXED_POINT
 
 /* Type used to represent fixed point numbers, integer with 32 bits*/
-#typedef fixed_point_number int32_t;
+typedef int32_t fixed_point_number;
 
 /* Number of bits in a fixed point number after the decimal point */
 #define FRACTIONAL_BITS (14)
@@ -26,17 +26,17 @@
 
 /* Wrapper for FP_ONE_MUL that gives a clear interface to convert an 
    int to a fixed point number */
-#define INT_TO_FIXED_POINT(n) \
+#define INT_TO_FP(n) \
   (fixed_point_number) (FP_ONE_MUL(n))
 
 /* Wrapper for FP_ONE_DIV that gives a clear interface to convert a
    fixed point number to an int
    always rounds towards 0 */
-#define FIXED_POINT_TO_INT(x) \
+#define FP_TO_INT(x) \
   (int) (FP_ONE_DIV(x))
 
 /* Converts a fixed point number to an int by rounding to the nearest int */
-#define FIXED_POINT_TO_NEAREST_INT(x) \
+#define FP_TO_NEAREST_INT(x) \
   (int) (x >= 0 ? x + (FIXED_POINT_ONE / 2) : x - (FIXED_POINT_ONE / 2))
 
 /* Adds two fixed point numbers */

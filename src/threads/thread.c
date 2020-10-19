@@ -15,6 +15,9 @@
 #include "userprog/process.h"
 #endif
 
+#include "threads/fixed-point.h"
+#include "devices/timer.h"
+
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
@@ -56,6 +59,10 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 static int max_priority;        /* Current maximum priority of the
 				   ready threads. */
 
+/* BSD Scheduling */
+static fixed_point_number load_avg; /* System average load of the last
+				       time slice*/
+
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-mlfqs". */
@@ -94,6 +101,9 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+
+  /* Initialises load_avg to 0 (no work has been done) */
+  load_avg = 0;
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -142,6 +152,12 @@ thread_tick (void)
 #endif
   else
     kernel_ticks++;
+
+  /* Update load_avg and recent_cpu on each second */
+  if (timer_ticks() % TIMER_FREQ == 0) {
+    load_avg = FP_ADD(FP_DIV_INT(FP_MUL_INT(load_avg, 59), 60),
+		      FP_DIV_INT(INT_TO_FP(threads_ready()), 60));
+  }
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -377,25 +393,25 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int nice) 
 {
-  /* Not yet implemented. */
+  thread_current()->nice = nice;
+
+  /* Recalculates priority */
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current()->nice;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return FP_TO_INT(FP_MUL_INT(load_avg, 100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
