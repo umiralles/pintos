@@ -213,7 +213,7 @@ lock_acquire (struct lock *lock)
 
   if(lock->holder && lock->holder->priority < thread_get_priority()) {
     struct donation *donation = NULL;
-    donation_init(donation, lock);
+    donation_init(donation, lock, thread_get_priority());
     donation->origin->thread = thread_current();
     donation->from_thread = true;
     list_push_back(&thread_current()->donations_list, &donation->recipient);
@@ -254,6 +254,9 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  /* Call to donation_revoke() */
+
+  
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }

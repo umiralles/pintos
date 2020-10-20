@@ -361,7 +361,8 @@ thread_set_priority (int new_priority)
   thread_current ()->priority = new_priority;
 
   if(!list_empty(&ready_list)) {
-    struct list_elem *max_thread_elem = list_max(&ready_list, cmp_priority, NULL);
+    struct list_elem *max_thread_elem =
+      list_max(&ready_list, cmp_priority, NULL);
     struct thread *max_thread = list_entry(max_thread_elem, struct thread, elem);
     if(max_thread->priority > new_priority) {
       thread_yield();
@@ -493,6 +494,7 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->base_priority = priority;
   list_init(&t->donations_list);
   t->magic = THREAD_MAGIC;
 
@@ -630,10 +632,12 @@ allocate_tid (void)
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-void donation_init(struct donation *donation, struct lock *lock) {
+void donation_init(struct donation *donation, struct lock *lock, int priority) {
   donation = malloc(sizeof(struct donation));
   donation->origin = malloc(sizeof(union origin));
   donation->resource = lock;
+  donation->priority = priority;
+  donation->from_thread = true;
 }
 
 /* Not thread safe */
@@ -643,18 +647,58 @@ void donation_grant(struct donation *donation) {
      through the lock in donation */
 
   struct thread *receiving = donation->resource->holder;
-  receiving->priority = donation->origin->priority;
+  receiving->priority = donation->priority;
 
   /* If the high priority thread donates to a medium priority thread and this 
      medium thread is waiting on a lock which is held by a low priority thread 
      (medium must have donated to this low before) the high thread will donate 
      to the low thread as well  */ 
 
-  for (e = list_begin (receiving->donations_list);
-       e != list_end (receiving->donations_list);
-       e = list_next (e))
-    {
-      struct donation *d = list_entry (e, struct donation, recipient);      
+  struct list_elem *e;
+  for (e = list_begin (&receiving->donations_list);
+       e != list_end (&receiving->donations_list);
+       e = list_next (e)) {
+    struct donation *d = list_entry(e, struct donation, recipient);
+    if (d->resource->holder->priority < donation->priority){
+      donation_grant(d);
+      d->origin->donation = donation;
+      d->from_thread = false;
     }
+  } 
+}
+
+/* Not thread-safe */
+void donation_revoke(struct donation *donation) {
+
+   /* We need to 
+     1. Set the threads priority to it's prev priority (two cases:
+        I) If the thread doesn't have any other donations we change it to 
+     its original priority
+        II) We change it to the highest priority of the list of donations)
+     2. Recursively reverse all donations this thread has originally donated
+     3. Free the allocated memory for the donations */
+
   
+  struct thread *receiving = donation->resource->holder;
+  list_remove(donation->recipient);
+  if (list_empty(receiving->donations_list)){
+    thread_set_priority(receiving->base_priority);
+  } else {
+    struct list_elem *e;
+    /* ASSUMING THE LIST IS ORDERED - TO IMPLEMENT! */
+    struct list_elem *max_donation_elem = list_head(receiving->donations_list);
+    struct donation *max_donation = list_entry(max_donation_elem,
+					      struct donation, recipient);
+    thread_set_priority(max_donation->priority);
+    for (e = list_begin (&receiving->donations_list);
+	 e != list_end (&receiving->donations_list);
+	 e = list_next (e)) {
+      struct donation *d = list_entry(e, struct donation, recipient);
+      if (d->resource->holder->priority < donation->priority){
+	donation_grant(d);
+	d->origin->donation = donation;
+	d->from_thread = false;
+      }
+    } 
+  }
 }

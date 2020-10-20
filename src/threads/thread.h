@@ -88,6 +88,7 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+    int base_priority;                  /* Base priority prior to donations*/
     struct list_elem allelem;           /* List element for all threads list. */
     struct list donations_list;		/* Donations the thread received. */
 
@@ -117,6 +118,7 @@ struct donation {
   struct list_elem recipient;		/* The thread that receives 
 					   the donation */
   struct lock *resource;		/* The lock the donor is waiting on */
+  int priority;                         /* The priority donated */
   bool from_thread;			/* Is true if the origin is a thread */
 };
 
@@ -159,6 +161,7 @@ int thread_get_load_avg (void);
 list_less_func cmp_priority;
 
 /* Donations function. */
-void donation_init(struct donation *donation, struct lock *lock);
+void donation_init(struct donation *donation, struct lock *lock, int priority);
 void donation_grant(struct donation *donation);
+void donation_revoke(struct donation *donation);
 #endif /* threads/thread.h */
