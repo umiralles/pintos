@@ -219,6 +219,9 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+  
+  if (t->priority > thread_get_priority()) 
+    thread_yield();
 
   return tid;
 }
@@ -262,9 +265,7 @@ thread_unblock (struct thread *t)
   //printf("adding thread %d: priority %d\n", t->tid, t->priority);
   t->status = THREAD_READY;
   intr_set_level (old_level);
-  if(!(thread_current() == idle_thread) && t->priority > thread_current()->priority){
-     thread_yield();
-  }
+  
 }
 
 /* Returns the name of the running thread. */
