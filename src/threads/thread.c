@@ -358,7 +358,7 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  thread_current ()->base_priority = new_priority;
 
   if(!list_empty(&ready_list)) {
     struct list_elem *max_thread_elem =
@@ -496,6 +496,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->base_priority = priority;
   list_init(&t->donations_list);
+  sema_init(&t->donations_sema, 1);
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
@@ -635,9 +636,20 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 void donation_init(struct donation *donation, struct lock *lock, int priority) {
   donation = malloc(sizeof(struct donation));
   donation->origin = malloc(sizeof(union origin));
+  donation->origin->thread = malloc(sizeof(struct thread));
   donation->resource = lock;
   donation->priority = priority;
   donation->from_thread = true;
+}
+
+void donation_free(struct donation *donation) {
+  if(donation->from_thread) {
+    free(donation->origin->thread);
+  } else {
+    free(donation->origin->thread);
+  }
+  free(donation->origin);
+  free(donation);
 }
 
 /* Not thread safe */
@@ -654,6 +666,7 @@ void donation_grant(struct donation *donation) {
      (medium must have donated to this low before) the high thread will donate 
      to the low thread as well  */ 
 
+  sema_down(&receiving->donations_sema);
   struct list_elem *e;
   for (e = list_begin (&receiving->donations_list);
        e != list_end (&receiving->donations_list);
@@ -661,10 +674,15 @@ void donation_grant(struct donation *donation) {
     struct donation *d = list_entry(e, struct donation, recipient);
     if (d->resource->holder->priority < donation->priority){
       donation_grant(d);
+      if(d->from_thread) {
+        free(d->origin->thread);
+	d->origin->donation = malloc(sizeof(struct donation));
+      }
       d->origin->donation = donation;
       d->from_thread = false;
     }
-  } 
+  }
+  sema_up(&receiving->donations_sema);
 }
 
 /* Not thread-safe */
@@ -680,25 +698,24 @@ void donation_revoke(struct donation *donation) {
 
   
   struct thread *receiving = donation->resource->holder;
-  list_remove(donation->recipient);
-  if (list_empty(receiving->donations_list)){
+  list_remove(&donation->recipient);
+  if (list_empty(&receiving->donations_list)){
     thread_set_priority(receiving->base_priority);
   } else {
     struct list_elem *e;
-    /* ASSUMING THE LIST IS ORDERED - TO IMPLEMENT! */
-    struct list_elem *max_donation_elem = list_head(receiving->donations_list);
+    struct list_elem *max_donation_elem = list_head(&receiving->donations_list);
     struct donation *max_donation = list_entry(max_donation_elem,
 					      struct donation, recipient);
     thread_set_priority(max_donation->priority);
+
+    sema_down(&receiving->donations_sema);
     for (e = list_begin (&receiving->donations_list);
 	 e != list_end (&receiving->donations_list);
 	 e = list_next (e)) {
       struct donation *d = list_entry(e, struct donation, recipient);
-      if (d->resource->holder->priority < donation->priority){
-	donation_grant(d);
-	d->origin->donation = donation;
-	d->from_thread = false;
-      }
-    } 
+      donation_revoke(d); 
+    }
+    sema_up(&receiving->donations_sema);
   }
+  donation_free(donation);
 }

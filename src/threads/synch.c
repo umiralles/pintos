@@ -32,6 +32,8 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+static list_less_func cmp_donations;
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -204,6 +206,16 @@ lock_init (struct lock *lock)
    interrupt handler.  This function may be called with
    interrupts disabled, but interrupts will be turned back on if
    we need to sleep. */
+
+static bool cmp_donations(const struct list_elem *a, const struct list_elem *b,
+		void *aux UNUSED) {
+  struct donation *donation_a = list_entry(a, struct donation, recipient);
+  struct donation *donation_b = list_entry(b, struct donation, recipient);
+  
+  return donation_a->priority < donation_b->priority;
+}
+
+
 void
 lock_acquire (struct lock *lock)
 {
@@ -212,12 +224,19 @@ lock_acquire (struct lock *lock)
   ASSERT (!lock_held_by_current_thread (lock));
 
   if(lock->holder && lock->holder->priority < thread_get_priority()) {
+    sema_down(&thread_current()->donations_sema);
     struct donation *donation = NULL;
+    printf("Now entering donation_init");
     donation_init(donation, lock, thread_get_priority());
+    printf("Exited donation_init");
     donation->origin->thread = thread_current();
     donation->from_thread = true;
-    list_push_back(&thread_current()->donations_list, &donation->recipient);
+    list_insert_ordered(&thread_current()->donations_list,
+		    &donation->recipient, cmp_donations, NULL);
+    printf("Now entering donation_grant");
     donation_grant(donation);
+    printf("Exited donation_grant");
+    sema_up(&thread_current()->donations_sema);
   }  
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
