@@ -80,7 +80,7 @@ void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
 static thread_action_func update_recent_cpu;
-static inline int calc_mlfq_priority(const struct thread *t);
+static inline int calc_mlfqs_priority(const struct thread *t);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -169,29 +169,35 @@ thread_tick (void)
   else
     kernel_ticks++;
 
-  if (t != idle_thread) {
-    t->recent_cpu = FP_ADD_INT(t->recent_cpu, 1);
-  }
+  /* Priority update and calculations for mlfqs scheduling */
+  if (thread_mlfqs) {
+
+    /* Increment recent_cpu for running thread */
+    if (t != idle_thread) {
+      t->recent_cpu = FP_ADD_INT(t->recent_cpu, 1);
+    }
   
-  /* Update load_avg and recent_cpu on each second */
-  if (timer_ticks() % TIMER_FREQ == 0) {
-    int ready_threads = (t == idle_thread)
-      ? threads_ready() : threads_ready() + 1;
-    load_avg = FP_DIV_INT(FP_ADD_INT(FP_MUL_INT(load_avg, 59),
-				     ready_threads), 60);
-    thread_foreach(&update_recent_cpu, NULL);
+    /* Update load_avg and recent_cpu on each second */
+    if (timer_ticks() % TIMER_FREQ == 0) {
+      int ready_threads = (t == idle_thread)
+	? threads_ready() : threads_ready() + 1;
+      load_avg = FP_DIV_INT(FP_ADD_INT(FP_MUL_INT(load_avg, 59),
+				       ready_threads), 60);
+      thread_foreach(&update_recent_cpu, NULL);
   }
-  
-  /* every fourth tick, update the priority of the ready threads */
-  if (timer_ticks () % 4 == 0) {
-    t->priority = calc_mlfq_priority(t);
+
+    /* Every fourth tick, update the priority of the ready threads */
+    if (timer_ticks () % 4 == 0) {
+      t->priority = calc_mlfqs_priority(t);
     
-    struct list_elem *next = list_begin(&ready_list);
-    struct thread *next_thread = list_entry(next, struct thread, elem);
+      struct list_elem *next = list_begin(&ready_list);
+      struct thread *next_thread = list_entry(next,
+					      struct thread, elem);
     
-    while (next != NULL && next != list_tail(&ready_list)) {
-      next_thread->priority = calc_mlfq_priority(next_thread);
-      next = list_next(next);
+      while (next != NULL && next != list_tail(&ready_list)) {
+	next_thread->priority = calc_mlfqs_priority(next_thread);
+	next = list_next(next);
+      }
     }
   }
 
@@ -244,9 +250,13 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
-  t->nice = thread_current()->nice;
-  t->recent_cpu = thread_current()->recent_cpu;
-  t->priority = calc_mlfq_priority(t);
+
+  /* Initialise thread for mlfqs scheduling */
+  if (thread_mlfqs) {
+    t->nice = thread_current()->nice;
+    t->recent_cpu = thread_current()->recent_cpu;
+    t->priority = calc_mlfqs_priority(t);
+  }
   
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack' 
@@ -409,22 +419,18 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
-/* Calculate the new priority for mlfq scheduling */
-static inline int calc_mlfq_priority(const struct thread *t) {
+/* Calculate the new priority for mlfqs scheduling */
+static inline int calc_mlfqs_priority(const struct thread *t) {
   fixed_point_number p;
   p = FP_ADD_INT(FP_DIV_INT(t->recent_cpu, 4), (t->nice * 2));
 
-  int res = 0;
-
   if (FP_TO_NEAREST_INT(p) <= 0) {
-    res = PRI_MAX;
+    return PRI_MAX;
   } else if (FP_TO_NEAREST_INT(p) >= PRI_MAX - PRI_MIN) {
-    res = PRI_MIN;
-  } else {
-    res = FP_TO_NEAREST_INT(FP_SUB(INT_TO_FP(PRI_MAX), p));
+    return PRI_MIN;
   }
   
-  return res;
+  return FP_TO_NEAREST_INT(FP_SUB(INT_TO_FP(PRI_MAX), p));
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -459,7 +465,7 @@ thread_set_nice (int nice)
   t->nice = nice;
 
   /* Recalculates priority */
-  thread_set_priority(calc_mlfq_priority(t));
+  thread_set_priority(calc_mlfqs_priority(t));
 }
 
 /* Returns the current thread's nice value. */
