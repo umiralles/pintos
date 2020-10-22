@@ -634,11 +634,21 @@ allocate_tid (void)
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 void donation_init(struct donation *donation, struct lock *lock, int priority) {
-  donation = malloc(sizeof(struct donation));
+  //printf("1\n");
+  //if(donation == NULL)
+  //  printf("EXIT_FAILURE1");
   donation->origin = malloc(sizeof(union origin));
+  //printf("2\n");
+  //if(donation->origin == NULL)
+  //  printf("EXIT_FAILURE2");
   donation->origin->thread = malloc(sizeof(struct thread));
+  //printf("3\n");
+  //if(donation->origin->thread == NULL)
+  //  printf("EXIT_FAILURE3");
   donation->resource = lock;
+  //printf("4\n");
   donation->priority = priority;
+  //printf("5\n");
   donation->from_thread = true;
 }
 
@@ -702,20 +712,20 @@ void donation_revoke(struct donation *donation) {
   if (list_empty(&receiving->donations_list)){
     thread_set_priority(receiving->base_priority);
   } else {
-    struct list_elem *e;
+    //struct list_elem *e;
     struct list_elem *max_donation_elem = list_head(&receiving->donations_list);
     struct donation *max_donation = list_entry(max_donation_elem,
 					      struct donation, recipient);
     thread_set_priority(max_donation->priority);
 
-    sema_down(&receiving->donations_sema);
-    for (e = list_begin (&receiving->donations_list);
-	 e != list_end (&receiving->donations_list);
-	 e = list_next (e)) {
-      struct donation *d = list_entry(e, struct donation, recipient);
-      donation_revoke(d); 
-    }
-    sema_up(&receiving->donations_sema);
+    //sema_down(&receiving->donations_sema);
+    //for (e = list_begin (&receiving->donations_list);
+	// e != list_end (&receiving->donations_list);
+	 //e = list_next (e)) {
+      //struct donation *d = list_entry(e, struct donation, recipient);
+      //donation_revoke(d); 
+    //}
+    //sema_up(&receiving->donations_sema);
   }
   donation_free(donation);
 }

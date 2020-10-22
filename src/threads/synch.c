@@ -31,6 +31,7 @@
 #include <string.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/malloc.h"
 
 static list_less_func cmp_donations;
 
@@ -225,17 +226,17 @@ lock_acquire (struct lock *lock)
 
   if(lock->holder && lock->holder->priority < thread_get_priority()) {
     sema_down(&thread_current()->donations_sema);
-    struct donation *donation = NULL;
-    printf("Now entering donation_init");
+    struct donation *donation = malloc(sizeof(struct donation));
+    //printf("Now entering donation_init");
     donation_init(donation, lock, thread_get_priority());
-    printf("Exited donation_init");
+    //printf("Exited donation_init");
     donation->origin->thread = thread_current();
     donation->from_thread = true;
-    list_insert_ordered(&thread_current()->donations_list,
+    list_insert_ordered(&lock->holder->donations_list,
 		    &donation->recipient, cmp_donations, NULL);
-    printf("Now entering donation_grant");
+    //printf("Now entering donation_grant");
     donation_grant(donation);
-    printf("Exited donation_grant");
+    //printf("Exited donation_grant");
     sema_up(&thread_current()->donations_sema);
   }  
   sema_down (&lock->semaphore);
@@ -274,7 +275,16 @@ lock_release (struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
 
   /* Call to donation_revoke() */
-
+  struct list_elem *e;
+  for(e = list_begin(&lock->holder->donations_list);
+		  e != list_end(&lock->holder->donations_list);
+		  e = list_next(e)) {
+    //printf("here\n");
+    struct donation *d = list_entry(e, struct donation, recipient);
+    if(d->resource == lock) {
+      donation_revoke(d);
+    }
+  }
   
   lock->holder = NULL;
   sema_up (&lock->semaphore);
