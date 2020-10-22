@@ -358,13 +358,19 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->base_priority = new_priority;
+  if(thread_current()->priority == *thread_current()->effective_priority
+		  || new_priority > *thread_current()->effective_priority) {
+    thread_current()->effective_priority = &thread_current()->priority;
+    *thread_current()->effective_priority = new_priority;
+  } else {
+    thread_current ()->priority = new_priority;
+  }
 
   if(!list_empty(&ready_list)) {
     struct list_elem *max_thread_elem =
       list_max(&ready_list, cmp_priority, NULL);
     struct thread *max_thread = list_entry(max_thread_elem, struct thread, elem);
-    if(max_thread->priority > new_priority) {
+    if(*max_thread->effective_priority > new_priority) {
       thread_yield();
     }
   }
@@ -374,7 +380,7 @@ thread_set_priority (int new_priority)
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
+  return *thread_current ()->effective_priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -494,7 +500,7 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
-  t->base_priority = priority;
+  t->effective_priority = &t->priority;
   list_init(&t->donations_list);
   sema_init(&t->donations_sema, 1);
   t->magic = THREAD_MAGIC;
@@ -519,8 +525,8 @@ alloc_frame (struct thread *t, size_t size)
 
 bool cmp_priority(const struct list_elem *a,
 			 const struct list_elem *b, void *aux UNUSED) {
-  int priority_a = list_entry(a, struct thread, elem)->priority;
-  int priority_b = list_entry(b, struct thread, elem)->priority;
+  int priority_a = *list_entry(a, struct thread, elem)->effective_priority;
+  int priority_b = *list_entry(b, struct thread, elem)->effective_priority;
 
   return priority_a < priority_b;
 }
@@ -541,7 +547,7 @@ next_thread_to_run (void)
     struct thread *next = list_entry(next_elem, struct thread, elem);
     
     list_remove(next_elem);
-    max_priority = next->priority;
+    max_priority = *next->effective_priority;
     return next;
   }
 }
@@ -633,33 +639,36 @@ allocate_tid (void)
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-void donation_init(struct donation *donation, struct lock *lock, int priority) {
+void donation_init(struct donation *donation, struct lock *lock, struct thread *thread) {
   //printf("1\n");
   //if(donation == NULL)
   //  printf("EXIT_FAILURE1");
-  donation->origin = malloc(sizeof(union origin));
+  //donation->origin = malloc(sizeof(union origin));
   //printf("2\n");
   //if(donation->origin == NULL)
   //  printf("EXIT_FAILURE2");
-  donation->origin->thread = malloc(sizeof(struct thread));
+  //donation->origin = malloc(sizeof(struct thread));
+  donation->origin = thread;
+  donation->recipient = lock->holder;
   //printf("3\n");
   //if(donation->origin->thread == NULL)
   //  printf("EXIT_FAILURE3");
   donation->resource = lock;
   //printf("4\n");
-  donation->priority = priority;
+  donation->priority = thread->effective_priority;
   //printf("5\n");
   donation->from_thread = true;
 }
 
-void donation_free(struct donation *donation) {
-  if(donation->from_thread) {
+void donation_free(struct donation **donation) {
+  /* if(donation->from_thread) {
     free(donation->origin->thread);
   } else {
     free(donation->origin->thread);
-  }
-  free(donation->origin);
-  free(donation);
+  } */
+  //free(donation->origin);
+  //free(donation->recipient);
+  free(*donation);
 }
 
 /* Not thread safe */
@@ -668,14 +677,13 @@ void donation_grant(struct donation *donation) {
   /* Set recipient's priority to the donor's priority - 
      through the lock in donation */
 
-  struct thread *receiving = donation->resource->holder;
-  receiving->priority = donation->priority;
-
+  donation->recipient->effective_priority = donation->origin->effective_priority;
   /* If the high priority thread donates to a medium priority thread and this 
      medium thread is waiting on a lock which is held by a low priority thread 
      (medium must have donated to this low before) the high thread will donate 
      to the low thread as well  */ 
 
+  /*
   sema_down(&receiving->donations_sema);
   struct list_elem *e;
   for (e = list_begin (&receiving->donations_list);
@@ -693,6 +701,7 @@ void donation_grant(struct donation *donation) {
     }
   }
   sema_up(&receiving->donations_sema);
+*/
 }
 
 /* Not thread-safe */
@@ -707,16 +716,15 @@ void donation_revoke(struct donation *donation) {
      3. Free the allocated memory for the donations */
 
   
-  struct thread *receiving = donation->resource->holder;
-  list_remove(&donation->recipient);
-  if (list_empty(&receiving->donations_list)){
-    thread_set_priority(receiving->base_priority);
+  list_remove(&donation->donationselem);
+  if (list_empty(&donation->recipient->donations_list)){
+    donation->recipient->effective_priority = &donation->recipient->priority;
   } else {
     //struct list_elem *e;
-    struct list_elem *max_donation_elem = list_head(&receiving->donations_list);
+    struct list_elem *max_donation_elem = list_back(&donation->recipient->donations_list);
     struct donation *max_donation = list_entry(max_donation_elem,
-					      struct donation, recipient);
-    thread_set_priority(max_donation->priority);
+					      struct donation, donationselem);
+    donation->recipient->effective_priority = max_donation->priority;
 
     //sema_down(&receiving->donations_sema);
     //for (e = list_begin (&receiving->donations_list);
@@ -727,5 +735,5 @@ void donation_revoke(struct donation *donation) {
     //}
     //sema_up(&receiving->donations_sema);
   }
-  donation_free(donation);
+  donation_free(&donation);
 }

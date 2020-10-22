@@ -120,9 +120,9 @@ sema_up (struct semaphore *sema)
   
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters)){ 
-    max_thread = list_entry(list_front(&sema->waiters),
+    max_thread = list_entry(list_back(&sema->waiters),
 					   struct thread, elem);
-    list_pop_front(&sema->waiters);
+    list_pop_back(&sema->waiters);
     thread_unblock(max_thread); 
   }
   sema->value++;
@@ -197,6 +197,7 @@ lock_init (struct lock *lock)
 
   lock->holder = NULL;
   sema_init (&lock->semaphore, 1);
+  //list_init(&lock->donations_list);
 }
 
 /* Acquires LOCK, sleeping until it becomes available if
@@ -210,10 +211,10 @@ lock_init (struct lock *lock)
 
 static bool cmp_donations(const struct list_elem *a, const struct list_elem *b,
 		void *aux UNUSED) {
-  struct donation *donation_a = list_entry(a, struct donation, recipient);
-  struct donation *donation_b = list_entry(b, struct donation, recipient);
+  struct donation *donation_a = list_entry(a, struct donation, donationselem);
+  struct donation *donation_b = list_entry(b, struct donation, donationselem);
   
-  return donation_a->priority < donation_b->priority;
+  return *donation_a->priority < *donation_b->priority;
 }
 
 
@@ -224,16 +225,16 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  if(lock->holder && lock->holder->priority < thread_get_priority()) {
+  if(lock->holder && *lock->holder->effective_priority < thread_get_priority()) {
     sema_down(&thread_current()->donations_sema);
     struct donation *donation = malloc(sizeof(struct donation));
     //printf("Now entering donation_init");
-    donation_init(donation, lock, thread_get_priority());
+    donation_init(donation, lock, thread_current());
     //printf("Exited donation_init");
-    donation->origin->thread = thread_current();
-    donation->from_thread = true;
-    list_insert_ordered(&lock->holder->donations_list,
-		    &donation->recipient, cmp_donations, NULL);
+    //list_insert_ordered(&lock->donations_list,
+	//	    &donation->donationselem, cmp_donations, NULL);
+    list_insert_ordered(&donation->recipient->donations_list,
+		    &donation->donationselem, cmp_donations, NULL);
     //printf("Now entering donation_grant");
     donation_grant(donation);
     //printf("Exited donation_grant");
@@ -274,17 +275,34 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
-  /* Call to donation_revoke() */
-  struct list_elem *e;
-  for(e = list_begin(&lock->holder->donations_list);
-		  e != list_end(&lock->holder->donations_list);
-		  e = list_next(e)) {
-    //printf("here\n");
-    struct donation *d = list_entry(e, struct donation, recipient);
-    if(d->resource == lock) {
-      donation_revoke(d);
+  if(!list_empty(&thread_current()->donations_list)) {
+    struct donation *donation = NULL;
+    struct list_elem *e;
+    /* Call to donation_revoke() */
+    for(e = list_rbegin(&thread_current()->donations_list);
+		    e != list_rend(&thread_current()->donations_list);
+		    e = list_prev(e)) {
+      donation = list_entry(e, struct donation, donationselem);
+      if(donation->resource == lock) {
+	/* Need to move e to its previous element because deleting
+	   donation->donationselem in donation_revoke would make it a null
+	   pointer */
+	e = list_prev(e);
+        donation_revoke(donation);
+	e = list_next(e);
+      }
+    } 
+  }
+  /* if(!list_empty(&lock->donations_list)) {
+    struct list_elem *max_donation_elem =
+	  list_back(&lock->donations_list);
+    struct donation *max_donation = list_entry(max_donation_elem,
+		  struct donation, donationselem);
+    if(max_donation->resource == lock) {
+      donation_revoke(max_donation);
     }
   }
+  */
   
   lock->holder = NULL;
   sema_up (&lock->semaphore);
