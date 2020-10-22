@@ -177,13 +177,15 @@ thread_tick (void)
   if (timer_ticks() % TIMER_FREQ == 0) {
     int ready_threads = (t == idle_thread)
       ? threads_ready() : threads_ready() + 1;
-    load_avg = FP_ADD(FP_DIV_INT(FP_MUL_INT(load_avg, 59), 60),
-		      FP_DIV_INT(INT_TO_FP(ready_threads), 60));
+    load_avg = FP_DIV_INT(FP_ADD_INT(FP_MUL_INT(load_avg, 59),
+				     ready_threads), 60);
     thread_foreach(&update_recent_cpu, NULL);
   }
   
   /* every fourth tick, update the priority of the ready threads */
-  if (timer_ticks () % 4 == 3) {
+  if (timer_ticks () % 4 == 0) {
+    t->priority = calc_mlfq_priority(t);
+    
     struct list_elem *next = list_begin(&ready_list);
     struct thread *next_thread = list_entry(next, struct thread, elem);
     
@@ -244,6 +246,7 @@ thread_create (const char *name, int priority,
   tid = t->tid = allocate_tid ();
   t->nice = thread_current()->nice;
   t->recent_cpu = thread_current()->recent_cpu;
+  t->priority = calc_mlfq_priority(t);
   
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack' 
@@ -406,17 +409,22 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
+/* Calculate the new priority for mlfq scheduling */
 static inline int calc_mlfq_priority(const struct thread *t) {
-  int p;
-  p = FP_TO_INT(FP_SUB_INT(FP_DIV_INT(t->recent_cpu, 4),(t->nice * 2)));
+  fixed_point_number p;
+  p = FP_ADD_INT(FP_DIV_INT(t->recent_cpu, 4), (t->nice * 2));
 
-  if (p <= 0) {
-    return PRI_MAX;
-  } else if (p >= PRI_MAX - PRI_MIN) {
-    return PRI_MIN;
+  int res = 0;
+
+  if (FP_TO_NEAREST_INT(p) <= 0) {
+    res = PRI_MAX;
+  } else if (FP_TO_NEAREST_INT(p) >= PRI_MAX - PRI_MIN) {
+    res = PRI_MIN;
+  } else {
+    res = FP_TO_NEAREST_INT(FP_SUB(INT_TO_FP(PRI_MAX), p));
   }
   
-  return PRI_MAX - p;
+  return res;
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */

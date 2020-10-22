@@ -17,7 +17,7 @@ typedef int32_t fixed_point_number;
 /* Multiplies a fixed point number x by the value FIXED_POINT_ONE
    uses shifts for efficiency */
 #define FP_ONE_MUL(x) \
-  (((fixed_point_number) x) << FRACTIONAL_BITS)
+  (((1 << 31) & x) | (((fixed_point_number) x) << FRACTIONAL_BITS))
 
 /* Divides a fixed point number by the value FIXED_POINT_ONE
    uses shifts for efficiency */
@@ -37,7 +37,9 @@ typedef int32_t fixed_point_number;
 
 /* Converts a fixed point number to an int by rounding to the nearest int */
 #define FP_TO_NEAREST_INT(x) \
-  (int) (x >= 0 ? x + (FIXED_POINT_ONE / 2) : x - (FIXED_POINT_ONE / 2))
+  (int) (x >= 0 \
+  ? FP_ONE_DIV(FP_ADD(x, (FP_DIV_INT(FIXED_POINT_ONE, 2)))) \
+  : FP_ONE_DIV(FP_SUB(x, (FP_DIV_INT(FIXED_POINT_ONE, 2)))))
 
 /* Adds two fixed point numbers */
 #define FP_ADD(x, y) \
