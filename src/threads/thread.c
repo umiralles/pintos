@@ -79,7 +79,8 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
-static thread_action_func calc_recent_cpu;
+static thread_action_func update_recent_cpu;
+static inline int calc_mlfq_priority(const struct thread *t);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -142,7 +143,7 @@ threads_ready (void)
 /* Calculates the recent_cpu for a given thread t.
    fixed_point_number temp is used as a temporary variable for
    readability */
-static void calc_recent_cpu(struct thread *t, void *aux UNUSED) {
+static void update_recent_cpu(struct thread *t, void *aux UNUSED) {
   fixed_point_number temp;
 
   temp = FP_MUL_INT(load_avg, 2);
@@ -178,7 +179,18 @@ thread_tick (void)
       ? threads_ready() : threads_ready() + 1;
     load_avg = FP_ADD(FP_DIV_INT(FP_MUL_INT(load_avg, 59), 60),
 		      FP_DIV_INT(INT_TO_FP(ready_threads), 60));
-    thread_foreach(&calc_recent_cpu, NULL);
+    thread_foreach(&update_recent_cpu, NULL);
+  }
+  
+  /* every fourth tick, update the priority of the ready threads */
+  if (timer_ticks () % 4 == 3) {
+    struct list_elem *next = list_begin(&ready_list);
+    struct thread *next_thread = list_entry(next, struct thread, elem);
+    
+    while (next != NULL && next != list_tail(&ready_list)) {
+      next_thread->priority = calc_mlfq_priority(next_thread);
+      next = list_next(next);
+    }
   }
 
   /* Enforce preemption. */
@@ -394,6 +406,19 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
+static inline int calc_mlfq_priority(const struct thread *t) {
+  int p;
+  p = FP_TO_INT(FP_SUB_INT(FP_DIV_INT(t->recent_cpu, 4),(t->nice * 2)));
+
+  if (p <= 0) {
+    return PRI_MAX;
+  } else if (p >= PRI_MAX - PRI_MIN) {
+    return PRI_MIN;
+  }
+  
+  return PRI_MAX - p;
+}
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
@@ -420,9 +445,13 @@ thread_get_priority (void)
 void
 thread_set_nice (int nice) 
 {
-  thread_current()->nice = nice;
+  struct thread *t = thread_current();
+  /* asserts nice is in acceptable range */
+  ASSERT(nice <= 20 && nice >= -20);
+  t->nice = nice;
 
   /* Recalculates priority */
+  thread_set_priority(calc_mlfq_priority(t));
 }
 
 /* Returns the current thread's nice value. */
