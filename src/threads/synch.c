@@ -233,8 +233,10 @@ lock_acquire (struct lock *lock)
     //printf("Exited donation_init");
     //list_insert_ordered(&lock->donations_list,
 	//	    &donation->donationselem, cmp_donations, NULL);
-    list_insert_ordered(&donation->recipient->donations_list,
-		    &donation->donationselem, cmp_donations, NULL);
+    list_insert_ordered(&donation->recipient->received_donations_list,
+		    &donation->receivingselem, cmp_donations, NULL);
+    list_insert_ordered(&donation->origin->given_donations_list,
+		    &donation->originselem, cmp_donations, NULL);
     //printf("Now entering donation_grant");
     donation_grant(donation);
     //printf("Exited donation_grant");

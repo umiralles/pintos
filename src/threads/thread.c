@@ -683,25 +683,18 @@ void donation_grant(struct donation *donation) {
      (medium must have donated to this low before) the high thread will donate 
      to the low thread as well  */ 
 
-  /*
   sema_down(&receiving->donations_sema);
   struct list_elem *e;
-  for (e = list_begin (&receiving->donations_list);
-       e != list_end (&receiving->donations_list);
+  for (e = list_begin (&receiving->given_donations_list);
+       e != list_end (&receiving->given_donations_list);
        e = list_next (e)) {
-    struct donation *d = list_entry(e, struct donation, recipient);
-    if (d->resource->holder->priority < donation->priority){
+    struct donation *d = list_entry(e, struct donation, originselem);
+    if (d->recipient->effective_priority < donation->priority){
       donation_grant(d);
-      if(d->from_thread) {
-        free(d->origin->thread);
-	d->origin->donation = malloc(sizeof(struct donation));
-      }
-      d->origin->donation = donation;
-      d->from_thread = false;
+      //d->resource = donation->resource;
     }
   }
   sema_up(&receiving->donations_sema);
-*/
 }
 
 /* Not thread-safe */
@@ -717,23 +710,27 @@ void donation_revoke(struct donation *donation) {
 
   
   list_remove(&donation->donationselem);
-  if (list_empty(&donation->recipient->donations_list)){
+  if (list_empty(&donation->recipient->received_donations_list)){
     donation->recipient->effective_priority = &donation->recipient->priority;
   } else {
     //struct list_elem *e;
-    struct list_elem *max_donation_elem = list_back(&donation->recipient->donations_list);
+    struct list_elem *max_donation_elem = list_back(&donation->recipient->received_donations_list);
     struct donation *max_donation = list_entry(max_donation_elem,
 					      struct donation, donationselem);
     donation->recipient->effective_priority = max_donation->priority;
-
-    //sema_down(&receiving->donations_sema);
-    //for (e = list_begin (&receiving->donations_list);
-	// e != list_end (&receiving->donations_list);
-	 //e = list_next (e)) {
-      //struct donation *d = list_entry(e, struct donation, recipient);
-      //donation_revoke(d); 
-    //}
-    //sema_up(&receiving->donations_sema);
   }
+  sema_down(&receiving->donations_sema);
+  struct list_elem *e;
+  for (e = list_begin (&receiving->given_donations_list);
+       e != list_end (&receiving->given_donations_list);
+       e = list_next (e)) {
+    struct donation *d = list_entry(e, struct donation, originselem);
+    if (d->recipient->effective_priority < donation->priority){
+      
+      d->resource == donation->resource;
+    }
+  }
+  sema_up(&receiving->donations_sema);
+
   donation_free(&donation);
 }

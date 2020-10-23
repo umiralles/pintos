@@ -91,7 +91,8 @@ struct thread
     int priority;                       /* Priority. */
     int *effective_priority;            /* Base priority prior to donations */
     struct list_elem allelem;           /* List element for all threads list. */
-    struct list donations_list;		/* Donations the thread received. */
+    struct list received_donations_list;/* Donations the thread received. */
+    struct list given_donations_list;	/* Donations the thread gave. */
     struct semaphore donations_sema;	/* Semaphore used to lock donations_list */
 
     /* Shared between thread.c and synch.c. */
@@ -115,12 +116,13 @@ union origin {
 
 /* Represents a donation of priority */
 struct donation {
-  struct thread *origin;			/* The thread or donation from which
+  struct thread *origin;		/* The thread or donation from which
 					   the donation originates */
   struct thread *recipient;		/* The thread that receives 
 					   the donation */
   struct lock *resource;		/* The lock the donor is waiting on */
-  struct list_elem donationselem;	/* list elem of the donations list */
+  struct list_elem originselem;		/* list elem of thread giving donation */
+  struct list_elem receivingselem;	/* list elem of the thread receiving donation */
   int *priority;                        /* The priority donated */
   bool from_thread;			/* Is true if the origin is a thread */
 };
