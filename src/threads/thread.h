@@ -89,11 +89,12 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
-    int *effective_priority;            /* Base priority prior to donations */
+    int effective_priority;            /* Base priority prior to donations */
     struct list_elem allelem;           /* List element for all threads list. */
-    struct list received_donations_list;/* Donations the thread received. */
-    struct list given_donations_list;	/* Donations the thread gave. */
-    struct semaphore donations_sema;	/* Semaphore used to lock donations_list */
+    struct list donating_threads;	/* List of threads that donated to
+					   this thread */
+    struct list_elem donationselem;	/* list elem for list of donations */
+    struct lock *waiting_lock;		/* Lock on which thread is blocked */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -106,26 +107,6 @@ struct thread
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
-
-/* Represents the donor of a priority donation can be either a thread
-   or another donation (nested donations) */
-union origin {
-  struct thread *thread;
-  struct donation *donation;
-};
-
-/* Represents a donation of priority */
-struct donation {
-  struct thread *origin;		/* The thread or donation from which
-					   the donation originates */
-  struct thread *recipient;		/* The thread that receives 
-					   the donation */
-  struct lock *resource;		/* The lock the donor is waiting on */
-  struct list_elem originselem;		/* list elem of thread giving donation */
-  struct list_elem receivingselem;	/* list elem of the thread receiving donation */
-  int *priority;                        /* The priority donated */
-  bool from_thread;			/* Is true if the origin is a thread */
-};
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -166,8 +147,6 @@ int thread_get_load_avg (void);
 list_less_func cmp_priority;
 
 /* Donations function. */
-void donation_init(struct donation *donation, struct lock *lock, struct thread *thread);
-void donation_free(struct donation **donation);
-void donation_grant(struct donation *donation);
-void donation_revoke(struct donation *donation);
+void donation_grant(struct lock *lock, int priority);
+void donation_revoke(struct lock *lock);
 #endif /* threads/thread.h */

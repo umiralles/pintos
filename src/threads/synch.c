@@ -33,8 +33,6 @@
 #include "threads/thread.h"
 #include "threads/malloc.h"
 
-static list_less_func cmp_donations;
-
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -209,39 +207,21 @@ lock_init (struct lock *lock)
    interrupts disabled, but interrupts will be turned back on if
    we need to sleep. */
 
-static bool cmp_donations(const struct list_elem *a, const struct list_elem *b,
-		void *aux UNUSED) {
-  struct donation *donation_a = list_entry(a, struct donation, donationselem);
-  struct donation *donation_b = list_entry(b, struct donation, donationselem);
-  
-  return *donation_a->priority < *donation_b->priority;
-}
-
-
 void
 lock_acquire (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
-
-  if(lock->holder && *lock->holder->effective_priority < thread_get_priority()) {
-    sema_down(&thread_current()->donations_sema);
-    struct donation *donation = malloc(sizeof(struct donation));
-    //printf("Now entering donation_init");
-    donation_init(donation, lock, thread_current());
-    //printf("Exited donation_init");
-    //list_insert_ordered(&lock->donations_list,
-	//	    &donation->donationselem, cmp_donations, NULL);
-    list_insert_ordered(&donation->recipient->received_donations_list,
-		    &donation->receivingselem, cmp_donations, NULL);
-    list_insert_ordered(&donation->origin->given_donations_list,
-		    &donation->originselem, cmp_donations, NULL);
-    //printf("Now entering donation_grant");
-    donation_grant(donation);
-    //printf("Exited donation_grant");
-    sema_up(&thread_current()->donations_sema);
-  }  
+   
+  if(lock->holder) {
+    thread_current()->waiting_lock = lock;
+    list_insert_ordered(&lock->holder->donating_threads,
+		      &thread_current()->donationselem, cmp_priority, NULL);
+    if(thread_current()->effective_priority > lock->holder->effective_priority) {  
+      donation_grant(lock, thread_current()->effective_priority);
+    }
+  }
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
 }
@@ -277,35 +257,30 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
-  if(!list_empty(&thread_current()->donations_list)) {
-    struct donation *donation = NULL;
+  if(!list_empty(&lock->holder->donating_threads)) {
     struct list_elem *e;
-    /* Call to donation_revoke() */
-    for(e = list_rbegin(&thread_current()->donations_list);
-		    e != list_rend(&thread_current()->donations_list);
-		    e = list_prev(e)) {
-      donation = list_entry(e, struct donation, donationselem);
-      if(donation->resource == lock) {
+    for(e = list_rbegin(&thread_current()->donating_threads);
+		      e != list_rend(&thread_current()->donating_threads);
+		      e = list_prev(e)) {
+      struct thread *max_thread = list_entry(e, struct thread, donationselem);
+      if(max_thread->waiting_lock == lock) {
 	/* Need to move e to its previous element because deleting
 	   donation->donationselem in donation_revoke would make it a null
 	   pointer */
 	e = list_prev(e);
-        donation_revoke(donation);
+        donation_revoke(lock);
 	e = list_next(e);
       }
-    } 
-  }
-  /* if(!list_empty(&lock->donations_list)) {
-    struct list_elem *max_donation_elem =
-	  list_back(&lock->donations_list);
-    struct donation *max_donation = list_entry(max_donation_elem,
-		  struct donation, donationselem);
-    if(max_donation->resource == lock) {
-      donation_revoke(max_donation);
     }
+   if(list_empty(&lock->holder->donating_threads)) {
+    lock->holder->effective_priority = lock->holder->priority;
+  } else {
+    struct list_elem *max_thread_elem = list_back(&lock->holder->donating_threads);
+    struct thread *max_thread = list_entry(max_thread_elem, struct thread, donationselem);
+    lock->holder->effective_priority = max_thread->effective_priority;
   }
-  */
-  
+  }
+ 
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }
