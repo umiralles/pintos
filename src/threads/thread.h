@@ -148,5 +148,5 @@ list_less_func cmp_priority;
 
 /* Donations function. */
 void donation_grant(struct lock *lock, int priority);
-void donation_revoke(struct lock *lock);
+void donation_revoke(struct thread *thread);
 #endif /* threads/thread.h */

@@ -647,8 +647,7 @@ void donation_grant(struct lock *lock, int priority) {
 }
 
 /* Not thread-safe */
-void donation_revoke(struct lock *lock) {
-  struct list_elem *max_thread_elem = list_pop_back(&lock->holder->donating_threads); 
-  struct thread *max_thread = list_entry(max_thread_elem, struct thread, donationselem);
-  max_thread->waiting_lock = NULL; 
+void donation_revoke(struct thread *thread) {
+  thread->waiting_lock = NULL; 
+  list_remove(&thread->donationselem);
 }
