@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include "synch.h"
 
+#include "threads/fixed-point.h"
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -86,15 +88,19 @@ struct thread
     /* Owned by thread.c. */
     tid_t tid;                          /* Thread identifier. */
     enum thread_status status;          /* Thread state. */
-    char name[16];                      /* Name (for debugging purposes). */
+    char name[16];                      /* Name (for debugging
+					   purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
-    int effective_priority;            /* Base priority prior to donations */
-    struct list_elem allelem;           /* List element for all threads list. */
-    struct list donating_threads;	/* List of threads that donated to
-					   this thread */
-    struct list_elem donationselem;	/* list elem for list of donations */
-    struct lock *waiting_lock;		/* Lock on which thread is blocked */
+    int effective_priority;             /* Base priority prior to donations */
+    int nice;                           /* Niceness */
+    fixed_point_number recent_cpu;      /* Recent CPU usage */
+    struct list_elem allelem;           /* List element for all threads
+					   list. */
+    struct list donating_threads;	    /* List of threads that donated to
+					                    this thread */
+    struct list_elem donationselem;	    /* list elem for list of donations */
+    struct lock *waiting_lock;		    /* Lock on which thread is blocked */
     struct semaphore donations_sema;
 
     /* Shared between thread.c and synch.c. */
