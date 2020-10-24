@@ -95,6 +95,7 @@ struct thread
 					   this thread */
     struct list_elem donationselem;	/* list elem for list of donations */
     struct lock *waiting_lock;		/* Lock on which thread is blocked */
+    struct semaphore donations_sema;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -148,5 +149,5 @@ list_less_func cmp_priority;
 
 /* Donations function. */
 void donation_grant(struct lock *lock, int priority);
-void donation_revoke(struct thread *thread);
+void donation_revoke(struct lock *lock);
 #endif /* threads/thread.h */

@@ -215,12 +215,14 @@ lock_acquire (struct lock *lock)
   ASSERT (!lock_held_by_current_thread (lock));
    
   if(lock->holder) {
+    sema_down(&lock->holder->donations_sema);
     thread_current()->waiting_lock = lock;
-    list_insert_ordered(&lock->holder->donating_threads,
-		      &thread_current()->donationselem, cmp_priority, NULL);
     if(thread_current()->effective_priority > lock->holder->effective_priority) {  
+      list_insert_ordered(&lock->holder->donating_threads,
+		      &thread_current()->donationselem, cmp_priority, NULL);
       donation_grant(lock, thread_current()->effective_priority);
     }
+    sema_up(&lock->holder->donations_sema);
   }
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
@@ -258,20 +260,8 @@ lock_release (struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
 
   if(!list_empty(&lock->holder->donating_threads)) {
-    struct list_elem *e;
-    for(e = list_rbegin(&thread_current()->donating_threads);
-		      e != list_rend(&thread_current()->donating_threads);
-		      e = list_prev(e)) {
-      struct thread *max_thread = list_entry(e, struct thread, donationselem);
-      if(max_thread->waiting_lock == lock) {
-	/* Need to move e to its previous element because deleting
-	   donation->donationselem in donation_revoke would make it a null
-	   pointer */
-	e = list_prev(e);
-        donation_revoke(max_thread);
-	e = list_next(e);
-      }
-    }
+    sema_down(&lock->holder->donations_sema);
+    donation_revoke(lock);    
     if(list_empty(&lock->holder->donating_threads)) {
       lock->holder->effective_priority = lock->holder->priority;
     } else {
@@ -279,6 +269,7 @@ lock_release (struct lock *lock)
       struct thread *max_thread = list_entry(max_thread_elem, struct thread, donationselem);
       lock->holder->effective_priority = max_thread->effective_priority;
     }
+    sema_up(&lock->holder->donations_sema);
   }
  
   lock->holder = NULL;
@@ -381,9 +372,6 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (lock_held_by_current_thread (lock));
 
   if (!list_empty (&cond->waiters)) {
-    //struct list_elem *max_thread_elem = list_max(&cond->waiters, cmp_priority_cond, NULL);
-    //struct semaphore_elem *max_thread = list_entry(max_thread_elem,
-    //struct semaphore_elem, elem);
     struct list_elem *max = list_max(&cond->waiters, cmp_priority_cond, NULL);
     struct semaphore_elem *max_elem = list_entry(max, struct semaphore_elem, elem);
     list_remove(max);

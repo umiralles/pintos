@@ -358,9 +358,16 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  if(thread_current()->priority == thread_current()->effective_priority
-		  || new_priority > thread_current()->effective_priority) {
+  if(list_empty(&thread_current()->donating_threads)) {
     thread_current()->effective_priority = new_priority;
+  } else {
+    struct thread *max_donating = list_entry(list_back(&thread_current()->donating_threads),
+	  struct thread, donationselem);
+    if(new_priority > max_donating->priority) {
+      thread_current()->effective_priority = new_priority;
+    } else {
+      thread_current()->effective_priority = max_donating->priority;
+    }
   }
   thread_current ()->priority = new_priority;
 
@@ -368,7 +375,7 @@ thread_set_priority (int new_priority)
     struct list_elem *max_thread_elem =
       list_max(&ready_list, cmp_priority, NULL);
     struct thread *max_thread = list_entry(max_thread_elem, struct thread, elem);
-    if(max_thread->effective_priority > new_priority) {
+    if(max_thread->effective_priority > thread_current()->effective_priority) {
       thread_yield();
     }
   }
@@ -500,7 +507,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->effective_priority = priority;
   list_init(&t->donating_threads);
-  //sema_init(&t->donations_sema, 1);
+  t->waiting_lock = NULL;
+  sema_init(&t->donations_sema, 1);
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
@@ -647,7 +655,26 @@ void donation_grant(struct lock *lock, int priority) {
 }
 
 /* Not thread-safe */
-void donation_revoke(struct thread *thread) {
-  thread->waiting_lock = NULL; 
-  list_remove(&thread->donationselem);
+void donation_revoke(struct lock *lock) {
+  struct thread *next_owner = list_entry(list_max(&lock->semaphore.waiters,
+			  cmp_priority, NULL), struct thread, elem);
+  struct list_elem *e = NULL;
+  for(e = list_rbegin(&thread_current()->donating_threads); 
+                      e != list_rend(&thread_current()->donating_threads); 
+                      e = list_prev(e)) { 
+      struct thread *max_thread = list_entry(e, struct thread, donationselem); 
+      if(max_thread->waiting_lock == lock) { 
+        /* Need to move e to its previous element because deleting 
+           donation->donationselem in donation_revoke would make it a null 
+           pointer */ 
+        e = list_prev(e);
+	list_remove(&max_thread->donationselem);
+	if(max_thread != next_owner) {
+	  list_insert_ordered(&next_owner->donating_threads,
+                        &max_thread->donationselem, cmp_priority, NULL);
+	} 
+        e = list_next(e); 
+      } 
+  }
+  lock->holder->waiting_lock = NULL;
 }
