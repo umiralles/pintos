@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "synch.h"
 
 #include "threads/fixed-point.h"
 
@@ -91,10 +92,16 @@ struct thread
 					   purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+    int effective_priority;             /* Base priority prior to donations */
     int nice;                           /* Niceness */
     fixed_point_number recent_cpu;      /* Recent CPU usage */
     struct list_elem allelem;           /* List element for all threads
 					   list. */
+    struct list donating_threads;	    /* List of threads that donated to
+					                    this thread */
+    struct list_elem donationselem;	    /* list elem for list of donations */
+    struct lock *waiting_lock;		    /* Lock on which thread is blocked */
+    struct semaphore donations_sema;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -145,4 +152,8 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 list_less_func cmp_priority;
+
+/* Donations function. */
+void donation_grant(struct lock *lock, int priority);
+void donation_revoke(struct lock *lock);
 #endif /* threads/thread.h */
