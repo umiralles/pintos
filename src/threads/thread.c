@@ -476,7 +476,10 @@ thread_set_nice (int nice)
   ASSERT(nice <= 20 && nice >= -20);
   t->nice = nice;
 
-  /* Recalculates priority */
+  /* Recalculates priority 
+     uses thread_set_priority to make sure there is a check on the priority
+     and yields the current thread if necessary
+   */
   thread_set_priority(calc_mlfqs_priority(t));
 }
 
@@ -611,11 +614,20 @@ alloc_frame (struct thread *t, size_t size)
   return t->stack;
 }
 
+/* returns whether thread a has a lower priority than thread b
+   uses priority field if in mlfqs mode and effective priority in donation mode
+*/
 bool cmp_priority(const struct list_elem *a,
 			 const struct list_elem *b, void *aux UNUSED) {
-  int priority_a = list_entry(a, struct thread, elem)->effective_priority;
-  int priority_b = list_entry(b, struct thread, elem)->effective_priority;
+  int priority_a, priority_b;
 
+  if (thread_mlfqs) {
+    priority_a = list_entry(a, struct thread, elem)->priority;
+    priority_b = list_entry(b, struct thread, elem)->priority;
+  } else {
+    priority_a = list_entry(a, struct thread, elem)->effective_priority;
+    priority_b = list_entry(b, struct thread, elem)->effective_priority;
+  }
   return priority_a < priority_b;
 }
 
@@ -635,7 +647,13 @@ next_thread_to_run (void)
     struct thread *next = list_entry(next_elem, struct thread, elem);
     
     list_remove(next_elem);
-    max_priority = next->effective_priority;
+
+    /* sets global maximum priority based on scheduling technique being used */
+    if (thread_mlfqs) {
+      max_priority = next->priority;
+    } else {
+      max_priority = next->effective_priority;
+    }
     return next;
   }
 }
