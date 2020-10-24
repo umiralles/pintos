@@ -80,6 +80,7 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+/* functions needed for mlfqs calculations */
 static thread_action_func update_recent_cpu;
 static inline int calc_mlfqs_priority(const struct thread *t);
 
@@ -139,18 +140,6 @@ size_t
 threads_ready (void)
 {
   return list_size (&ready_list);      
-}
-
-/* Calculates the recent_cpu for a given thread t.
-   fixed_point_number temp is used as a temporary variable for
-   readability */
-static void update_recent_cpu(struct thread *t, void *aux UNUSED) {
-  fixed_point_number temp;
-
-  temp = FP_MUL_INT(load_avg, 2);
-  temp = FP_DIV(temp, FP_ADD_INT(temp, 1));
-  temp = FP_MUL(temp, t->recent_cpu);
-  t->recent_cpu = FP_ADD_INT(temp, t->nice);
 }
 
 /* Called by the timer interrupt handler at each timer tick.
@@ -419,6 +408,20 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
+/* MLFQS CALCULATION HELPER METHODS */
+
+/* Calculates the recent_cpu for a given thread t.
+   fixed_point_number temp is used as a temporary variable for
+   readability */
+static void update_recent_cpu(struct thread *t, void *aux UNUSED) {
+  fixed_point_number temp;
+
+  temp = FP_MUL_INT(load_avg, 2);
+  temp = FP_DIV(temp, FP_ADD_INT(temp, 1));
+  temp = FP_MUL(temp, t->recent_cpu);
+  t->recent_cpu = FP_ADD_INT(temp, t->nice);
+}
+
 /* Calculate the new priority for mlfqs scheduling */
 static inline int calc_mlfqs_priority(const struct thread *t) {
   fixed_point_number p;
@@ -433,27 +436,42 @@ static inline int calc_mlfqs_priority(const struct thread *t) {
   return FP_TO_NEAREST_INT(FP_SUB(INT_TO_FP(PRI_MAX), p));
 }
 
+/* GETTERS AND SETTERS FOR PRIORITY DATA */
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
 {
+  /* asserts new_priority is in acceptable range */
+  ASSERT(new_priority <= PRI_MAX && new_priority >= PRI_MIN);
+  
+  /* checks if the thread has donations and if so updates effective priority
+     to be the maximum priority of all its donations
+   */
   if(list_empty(&thread_current()->donating_threads)) {
     thread_current()->effective_priority = new_priority;
   } else {
-    struct thread *max_donating = list_entry(list_back(&thread_current()->donating_threads),
-	  struct thread, donationselem);
+    struct thread *max_donating =
+      list_entry(list_back(&thread_current()->donating_threads),
+		 struct thread, donationselem);
+    
     if(new_priority > max_donating->priority) {
       thread_current()->effective_priority = new_priority;
     } else {
       thread_current()->effective_priority = max_donating->priority;
     }
   }
+  
   thread_current ()->priority = new_priority;
 
+  /* yields the current thread if the new priority is higher than the current
+     max priority */
   if(!list_empty(&ready_list)) {
     struct list_elem *max_thread_elem =
       list_max(&ready_list, cmp_priority, NULL);
-    struct thread *max_thread = list_entry(max_thread_elem, struct thread, elem);
+    struct thread *max_thread =
+      list_entry(max_thread_elem, struct thread, elem);
+    
     if(max_thread->effective_priority > thread_current()->effective_priority) {
       thread_yield();
     }
@@ -469,12 +487,12 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice) 
+thread_set_nice (int new_nice) 
 {
   struct thread *t = thread_current();
-  /* asserts nice is in acceptable range */
-  ASSERT(nice <= 20 && nice >= -20);
-  t->nice = nice;
+  /* asserts new_nice is in acceptable range */
+  ASSERT(new_nice <= 20 && new_nice >= -20);
+  t->nice = new_nice;
 
   /* Recalculates priority 
      uses thread_set_priority to make sure there is a check on the priority
@@ -642,6 +660,7 @@ next_thread_to_run (void)
   if (list_empty (&ready_list)) {
     return idle_thread;
   } else {
+    /* gets the thread with the highest priority */
     struct list_elem *next_elem = list_max(&ready_list, cmp_priority,
 					  NULL);
     struct thread *next = list_entry(next_elem, struct thread, elem);
@@ -745,7 +764,7 @@ allocate_tid (void)
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-/* Not thread safe */
+/* grants a donation of given priority to the holder of a lock */
 void donation_grant(struct lock *lock, int priority) {
   //lock->priority = priority;
   lock->holder->effective_priority = priority;
@@ -754,7 +773,7 @@ void donation_grant(struct lock *lock, int priority) {
   }
 }
 
-/* Not thread-safe */
+/* revokes all donations related to a given lock */
 void donation_revoke(struct lock *lock) {
   struct thread *next_owner = list_entry(list_max(&lock->semaphore.waiters,
 			  cmp_priority, NULL), struct thread, elem);

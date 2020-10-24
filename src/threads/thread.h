@@ -97,11 +97,11 @@ struct thread
     fixed_point_number recent_cpu;      /* Recent CPU usage */
     struct list_elem allelem;           /* List element for all threads
 					   list. */
-    struct list donating_threads;	    /* List of threads that donated to
-					                    this thread */
-    struct list_elem donationselem;	    /* list elem for list of donations */
-    struct lock *waiting_lock;		    /* Lock on which thread is blocked */
-    struct semaphore donations_sema;
+    struct list donating_threads;	/* List of threads that donated to
+					   this thread */
+    struct list_elem donationselem;	/* List elem for list of donations */
+    struct lock *waiting_lock;		/* Lock on which thread is blocked */
+    struct semaphore donations_sema;    /* Controls access to donating_threads */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */

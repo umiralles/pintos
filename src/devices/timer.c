@@ -104,7 +104,7 @@ timer_sleep (int64_t ticks)
   /* Insert element into the list, which is ordered by ascending
      asleep_ticks */
   enum intr_level old_level = intr_disable();
-  list_insert_ordered(&sleeping_threads, &(curr_t.sleep_status),
+  list_insert_ordered(&sleeping_threads, &(curr_t.sleep_elem),
 		      sleep_less_func, NULL);
   intr_set_level(old_level);
 
@@ -199,7 +199,7 @@ static void thread_wake_up(void) {
   while(!list_empty (&sleeping_threads)) {    
     struct list_elem *sleeping_el = list_front(&sleeping_threads); 
     struct thread_sleep *sleeping_thread =
-      list_entry(sleeping_el, struct thread_sleep, sleep_status);
+      list_entry(sleeping_el, struct thread_sleep, sleep_elem);
     
     if(sleeping_thread->asleep_ticks <= ticks) {
       sema_up(&sleeping_thread->sema);     
@@ -287,9 +287,9 @@ static bool sleep_less_func(const struct list_elem *a,
 			    const struct list_elem *b, void *aux UNUSED) {
   
   struct thread_sleep *thread_a = list_entry(a, struct thread_sleep,
-					     sleep_status);
+					     sleep_elem);
   struct thread_sleep *thread_b = list_entry(b, struct thread_sleep,
-					     sleep_status);
+					     sleep_elem);
 
   return thread_a->asleep_ticks < thread_b->asleep_ticks;
 }

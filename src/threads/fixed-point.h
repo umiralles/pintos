@@ -7,10 +7,6 @@ typedef int32_t fixed_point_number;
 /* Number of bits in a fixed point number after the decimal point */
 #define FRACTIONAL_BITS (14)
 
-/* Number of bits in a fixed point number before the decimal point
-   does not include the sign bit */
-#define INTEGER_BITS (31 - FRACTIONAL_BITS)
-
 /* The integer that represents the value 1 as a fixed point number*/
 #define FIXED_POINT_ONE (1 << FRACTIONAL_BITS)
 
