@@ -160,24 +160,22 @@ thread_tick (void)
     kernel_ticks++;
 
   /* Priority update and calculations for mlfqs scheduling */
-  if (thread_mlfqs) {
-
+  if(thread_mlfqs) {
     /* Increment recent_cpu for running thread */
-    if (t != idle_thread) {
+    if(t != idle_thread) {
       t->recent_cpu = FP_ADD_INT(t->recent_cpu, 1);
     }
-  
     /* Update load_avg and recent_cpu on each second */
-    if (timer_ticks() % TIMER_FREQ == 0) {
+    if(timer_ticks() % TIMER_FREQ == 0) {
       int ready_threads = (t == idle_thread)
 	? threads_ready() : threads_ready() + 1;
       load_avg = FP_DIV_INT(FP_ADD_INT(FP_MUL_INT(load_avg, 59),
 				       ready_threads), 60);
       thread_foreach(&update_recent_cpu, NULL);
-  }
+    }
 
     /* Every fourth tick, update the priority of the ready threads */
-    if (timer_ticks () % 4 == 0) {
+    if(timer_ticks() % 4 == 0) {
       t->priority = calc_mlfqs_priority(t);
       t->effective_priority = t->priority;
 
@@ -185,17 +183,18 @@ thread_tick (void)
       struct thread *next_thread = list_entry(next,
 					      struct thread, elem);
     
-      while (next != NULL && next != list_tail(&ready_list)) {
+      while(next != NULL && next != list_tail(&ready_list)) {
 	next_thread->priority = calc_mlfqs_priority(next_thread);
 	next_thread->effective_priority = next_thread->priority;
 	next = list_next(next);
       }
     }
   }
-
+  
   /* Enforce preemption. */
-  if (++thread_ticks >= TIME_SLICE)
+  if(++thread_ticks >= TIME_SLICE) {
     intr_yield_on_return ();
+  }
 }
 
 /* Prints thread statistics. */
@@ -244,7 +243,7 @@ thread_create (const char *name, int priority,
   tid = t->tid = allocate_tid ();
 
   /* Initialise thread for mlfqs scheduling */
-  if (thread_mlfqs) {
+  if(thread_mlfqs) {
     t->nice = thread_current()->nice;
     t->recent_cpu = thread_current()->recent_cpu;
     t->priority = calc_mlfqs_priority(t);
@@ -275,9 +274,10 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-  
-  if (t->priority > thread_get_priority()) 
+
+  if (t->priority > thread_get_priority()){ 
     thread_yield();
+  }
 
   return tid;
 }
@@ -430,9 +430,9 @@ static inline int calc_mlfqs_priority(const struct thread *t) {
   fixed_point_number p;
   p = FP_ADD_INT(FP_DIV_INT(t->recent_cpu, 4), (t->nice * 2));
 
-  if (FP_TO_NEAREST_INT(p) <= 0) {
+  if(FP_TO_NEAREST_INT(p) <= 0) {
     return PRI_MAX;
-  } else if (FP_TO_NEAREST_INT(p) >= PRI_MAX - PRI_MIN) {
+  } else if(FP_TO_NEAREST_INT(p) >= PRI_MAX - PRI_MIN) {
     return PRI_MIN;
   }
   
@@ -449,15 +449,14 @@ thread_set_priority (int new_priority)
   ASSERT(new_priority <= PRI_MAX && new_priority >= PRI_MIN);
 
   sema_down(&thread_current()->donations_sema);  
-  /* checks if the thread has donations and if so updates effective priority
-     to be the maximum priority of all its donations
-   */
+  /* Checks if the thread has donations; if so updates effective_priority
+     to the maximum priority of all its donations */
   if(list_empty(&thread_current()->donating_threads)) {
     thread_current()->effective_priority = new_priority;
   } else {
     struct thread *max_donating =
       list_entry(list_back(&thread_current()->donating_threads),
-		 struct thread, donationselem);
+		 struct thread, donations_elem);
     
     if(new_priority > max_donating->priority) {
       thread_current()->effective_priority = new_priority;
@@ -469,7 +468,7 @@ thread_set_priority (int new_priority)
 
   thread_current ()->priority = new_priority;
 
-  /* yields the current thread if the new priority is higher than the current
+  /* Yields the current thread if the new priority is higher than the current
      max priority */
   if(!list_empty(&ready_list)) {
     struct list_elem *max_thread_elem =
@@ -495,14 +494,13 @@ void
 thread_set_nice (int new_nice) 
 {
   struct thread *t = thread_current();
-  /* asserts new_nice is in acceptable range */
+  /* Asserts new_nice is in acceptable range */
   ASSERT(new_nice <= 20 && new_nice >= -20);
   t->nice = new_nice;
 
-  /* Recalculates priority 
+  /* Recalculates priority; 
      uses thread_set_priority to make sure there is a check on the priority
-     and yields the current thread if necessary
-   */
+     and yields the current thread if necessary */
   thread_set_priority(calc_mlfqs_priority(t));
 }
 
@@ -637,11 +635,10 @@ alloc_frame (struct thread *t, size_t size)
   return t->stack;
 }
 
-/* returns whether thread a has a lower priority than thread b
-   uses priority field if in mlfqs mode and effective priority in donation mode
-*/
+/* A list_less_func, compares two list elements based on their thread's
+   priority */
 bool cmp_priority(const struct list_elem *a,
-			 const struct list_elem *b, void *aux UNUSED) {
+		  const struct list_elem *b, void *aux UNUSED) {
   int priority_a, priority_b;
   priority_a = list_entry(a, struct thread, elem)->effective_priority;
   priority_b = list_entry(b, struct thread, elem)->effective_priority;
@@ -657,19 +654,18 @@ bool cmp_priority(const struct list_elem *a,
 static struct thread *
 next_thread_to_run (void) 
 {
-  if (list_empty (&ready_list)) {
+  if(list_empty (&ready_list)) {
     return idle_thread;
   } else {
-    /* gets the thread with the highest priority */
+    /* Gets the thread with the highest priority */
     struct list_elem *next_elem = list_max(&ready_list, cmp_priority,
-					  NULL);
+					   NULL);
     struct thread *next = list_entry(next_elem, struct thread, elem);
     
     list_remove(next_elem);
 
-    /* sets global maximum priority based on scheduling technique being used */
-    max_priority = next->effective_priority;
-    
+    /* Sets global maximum priority */
+    max_priority = next->effective_priority;    
     return next;
   }
 }
@@ -761,7 +757,7 @@ allocate_tid (void)
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-/* grants a donation of given priority to the holder of a lock */
+/* Grants a donation of given priority to the holder of a lock */
 void donation_grant(struct lock *lock, int priority) { 
   lock->holder->effective_priority = priority;
   if(lock->holder->waiting_lock) {
@@ -769,24 +765,25 @@ void donation_grant(struct lock *lock, int priority) {
   }
 }
 
-/* revokes all donations related to a given lock */
+/* Revokes all donations related to a given lock */
 void donation_revoke(struct lock *lock) {
   struct thread *next_owner = list_entry(list_max(&lock->semaphore.waiters,
-			  cmp_priority, NULL), struct thread, elem);
+						  cmp_priority, NULL),
+					 struct thread, elem);
   struct list_elem *e = NULL;
   for(e = list_rbegin(&thread_current()->donating_threads); 
-                      e != list_rend(&thread_current()->donating_threads); 
-                      e = list_prev(e)) { 
-      struct thread *max_thread = list_entry(e, struct thread, donationselem); 
-      if(max_thread->waiting_lock == lock) { 
-        /* Need to move e to its previous element because deleting 
-           donation->donationselem in donation_revoke would make it a null 
-           pointer */ 
+      e != list_rend(&thread_current()->donating_threads); 
+      e = list_prev(e)) { 
+    struct thread *max_thread = list_entry(e, struct thread, donations_elem); 
+    if(max_thread->waiting_lock == lock) { 
+      /* Need to move e to its previous element because deleting 
+	 donation->donations_elem in donation_revoke would make it a null 
+	 pointer */ 
         e = list_prev(e);
-	list_remove(&max_thread->donationselem);
+	list_remove(&max_thread->donations_elem);
 	if(max_thread != next_owner) {
 	  list_insert_ordered(&next_owner->donating_threads,
-                        &max_thread->donationselem, cmp_priority, NULL);
+			      &max_thread->donations_elem, cmp_priority, NULL);
 	} 
         e = list_next(e); 
       } 
