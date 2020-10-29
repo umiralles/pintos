@@ -179,13 +179,15 @@ thread_tick (void)
     /* Every fourth tick, update the priority of the ready threads */
     if (timer_ticks () % 4 == 0) {
       t->priority = calc_mlfqs_priority(t);
-    
+      t->effective_priority = t->priority;
+
       struct list_elem *next = list_begin(&ready_list);
       struct thread *next_thread = list_entry(next,
 					      struct thread, elem);
     
       while (next != NULL && next != list_tail(&ready_list)) {
 	next_thread->priority = calc_mlfqs_priority(next_thread);
+	next_thread->effective_priority = next_thread->priority;
 	next = list_next(next);
       }
     }
@@ -246,6 +248,7 @@ thread_create (const char *name, int priority,
     t->nice = thread_current()->nice;
     t->recent_cpu = thread_current()->recent_cpu;
     t->priority = calc_mlfqs_priority(t);
+    t->effective_priority = t->priority; 
   }
   
   /* Prepare thread for first run by initializing its stack.
@@ -444,7 +447,8 @@ thread_set_priority (int new_priority)
 {
   /* asserts new_priority is in acceptable range */
   ASSERT(new_priority <= PRI_MAX && new_priority >= PRI_MIN);
-  
+
+  sema_down(&thread_current()->donations_sema);  
   /* checks if the thread has donations and if so updates effective priority
      to be the maximum priority of all its donations
    */
@@ -461,7 +465,8 @@ thread_set_priority (int new_priority)
       thread_current()->effective_priority = max_donating->priority;
     }
   }
-  
+  sema_up(&thread_current()->donations_sema);
+
   thread_current ()->priority = new_priority;
 
   /* yields the current thread if the new priority is higher than the current
@@ -638,14 +643,9 @@ alloc_frame (struct thread *t, size_t size)
 bool cmp_priority(const struct list_elem *a,
 			 const struct list_elem *b, void *aux UNUSED) {
   int priority_a, priority_b;
+  priority_a = list_entry(a, struct thread, elem)->effective_priority;
+  priority_b = list_entry(b, struct thread, elem)->effective_priority;
 
-  if (thread_mlfqs) {
-    priority_a = list_entry(a, struct thread, elem)->priority;
-    priority_b = list_entry(b, struct thread, elem)->priority;
-  } else {
-    priority_a = list_entry(a, struct thread, elem)->effective_priority;
-    priority_b = list_entry(b, struct thread, elem)->effective_priority;
-  }
   return priority_a < priority_b;
 }
 
@@ -668,11 +668,8 @@ next_thread_to_run (void)
     list_remove(next_elem);
 
     /* sets global maximum priority based on scheduling technique being used */
-    if (thread_mlfqs) {
-      max_priority = next->priority;
-    } else {
-      max_priority = next->effective_priority;
-    }
+    max_priority = next->effective_priority;
+    
     return next;
   }
 }
@@ -765,8 +762,7 @@ allocate_tid (void)
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 /* grants a donation of given priority to the holder of a lock */
-void donation_grant(struct lock *lock, int priority) {
-  //lock->priority = priority;
+void donation_grant(struct lock *lock, int priority) { 
   lock->holder->effective_priority = priority;
   if(lock->holder->waiting_lock) {
     donation_grant(lock->holder->waiting_lock, priority);

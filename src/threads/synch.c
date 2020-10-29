@@ -127,12 +127,12 @@ sema_up (struct semaphore *sema)
   intr_set_level (old_level);
 
   if(max_thread != NULL  &&
-     max_thread->priority > thread_current()->priority) { 
-    if(intr_context()){
-      intr_yield_on_return();
-    } else {
-     thread_yield(); 
-    }
+       max_thread->effective_priority > thread_current()->effective_priority) { 
+      if(intr_context()){
+        intr_yield_on_return();
+      } else {
+       thread_yield(); 
+      }
   }
 }
 
@@ -217,9 +217,9 @@ lock_acquire (struct lock *lock)
   if(lock->holder) {
     sema_down(&lock->holder->donations_sema);
     thread_current()->waiting_lock = lock;
+    list_insert_ordered(&lock->holder->donating_threads,
+		      &thread_current()->donationselem, cmp_priority, NULL);  
     if(thread_current()->effective_priority > lock->holder->effective_priority) {  
-      list_insert_ordered(&lock->holder->donating_threads,
-		      &thread_current()->donationselem, cmp_priority, NULL);
       donation_grant(lock, thread_current()->effective_priority);
     }
     sema_up(&lock->holder->donations_sema);
