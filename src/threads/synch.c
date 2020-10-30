@@ -221,7 +221,8 @@ lock_acquire (struct lock *lock)
     thread_current()->waiting_lock = lock;
     list_insert_ordered(&lock->holder->donating_threads,
 			&thread_current()->donations_elem, cmp_priority, NULL);  
-    if(thread_current()->effective_priority > lock->holder->effective_priority) {       donation_grant(lock, thread_current()->effective_priority);
+    if(thread_current()->effective_priority > lock->holder->effective_priority) {
+      donation_grant(lock, thread_current()->effective_priority);
     }
     sema_up(&lock->holder->donations_sema);
   }
