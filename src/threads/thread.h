@@ -110,6 +110,7 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    struct list held_locks;		/* List of locks held by thread */
 #endif
 
     /* Owned by thread.c. */
