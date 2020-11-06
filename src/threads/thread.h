@@ -110,6 +110,7 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    struct list files;			/* List of file descriptors */
 #endif
 
     /* Owned by thread.c. */
