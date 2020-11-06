@@ -7,7 +7,7 @@ static void syscall_handler (struct intr_frame *);
 
 /* SYSTEM CALL FUNCTIONS */
 static void halt(struct intr_frame *f) {}
-static void exit(struct intr_frame *f) {}
+static void exit(struct intr_frame *f);
 static void exec(struct intr_frame *f) {}
 static void wait(struct intr_frame *f) {}
 static void create(struct intr_frame *f) {}
@@ -38,8 +38,13 @@ static void *get_argument(void *esp, int arg_no) {
 static void
 syscall_handler (struct intr_frame *f) 
 {
+  //check user mem access
   int32_t call_no = *((int32_t *) f->esp);
-  
   syscalls[call_no](f);
 }
 
+static void exit(struct intr_frame *f) {
+  int status = (int) get_argument(f->esp, 1);
+  f->eax = (uint32_t) status;
+  thread_exit();
+}
