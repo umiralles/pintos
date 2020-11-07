@@ -6,7 +6,9 @@
 /* the number of implemented and working system calls in the syscall table */
 #define MAX_SYSCALLS (13)
 
-#define FD_TO_INDEX(fd) (fd - 2)
+/* Takes the value of the argument pointer provided by get_argument */
+#define GET_ARGUMENT_VALUE(frame, type, no)	\
+  *((type *) get_argument(frame->esp, no))
 
 /* function template for a syscall operation 
    arguments and return location found in f

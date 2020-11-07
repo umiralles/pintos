@@ -66,13 +66,14 @@ static void exit(struct intr_frame *f) {
 /* One lock in a list. */
 struct lock_elem {
   struct list_elem elem;              /* List element. */
-  struct lock *lock;         		/* This lock. */
+  struct lock *lock;         	      /* This lock. */
 };
 
 // needs to be thread-safe!
+// not sure if this is needed, but we need some way of finding which locks are held by the thread
 static void
 syscall_acquire_lock(struct lock *lock) {
-  // acquire the l;ock somehow and add it to some list
+  // acquire the lock and add it to a list
   lock_acquire(lock);
   struct lock_elem lock_elem;
   lock_elem.lock = lock;
@@ -96,25 +97,25 @@ syscall_access_memory(const void *vaddr) {
 }
 
 struct file_elem {
-  struct list_elem files_elem;
-  struct file *file;
   int fd;
+  struct file *file;
+  struct list_elem elem;
 };
 
 static void write(struct intr_frame *f){
-  int fd = *((int *) get_argument(f->esp, 1));
-  const void *buffer = *((void **) get_argument(f->esp, 2));
-  unsigned size = *((unsigned *) get_argument(f->esp, 3));
+  int fd = GET_ARGUMENT_VALUE(f, int, 1);
+  const void *buffer = GET_ARGUMENT_VALUE(f, void *, 2);
+  unsigned size = GET_ARGUMENT_VALUE(f, unsigned, 3);
   off_t bytes_written;
   if(fd == STDOUT_FILENO) {
     putbuf(buffer, size);
     bytes_written = (off_t) size;
   } else {
     struct list_elem *e = list_begin(&thread_current()->files);	  
-    struct file_elem *file_elem = list_entry(e, struct file_elem, files_elem);
+    struct file_elem *file_elem = list_entry(e, struct file_elem, elem);
     while(file_elem->fd != fd) {
       e = list_next(e);
-      file_elem = list_entry(e, struct file_elem, files_elem);
+      file_elem = list_entry(e, struct file_elem, elem);
     }
     syscall_access_memory(file_elem->file); 
     bytes_written = file_write(file_elem->file, buffer, (off_t) size);
