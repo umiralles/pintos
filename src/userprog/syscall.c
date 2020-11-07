@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <syscall-nr.h>
 #include "threads/thread.h"
+#include "filesys/off_t.h"
+#include "filesys/file.h"
 
 static void syscall_handler (struct intr_frame *);
 static void syscall_acquire_lock(struct lock);
@@ -17,10 +19,13 @@ static void remove(struct intr_frame *f) {}
 static void open(struct intr_frame *f) {}
 static void filesize(struct intr_frame *f){}
 static void read(struct intr_frame *f) {}
-static void write(struct intr_frame *f){}
+static void write(struct intr_frame *f);
 static void seek(struct intr_frame *f) {}
 static void tell(struct intr_frame *f) {}
 static void close(struct intr_frame *f) {}
+
+/* MEMORY ACCESS FUNCTION */
+static void syscall_access_memory(const void *f) {}
 
 static syscall_func syscalls[MAX_SYSCALLS] = {&halt, &exit, &exec, &wait,
 					       &create, &remove, &open,
@@ -82,7 +87,29 @@ syscall_access_memory(const void *vaddr) {
   }
 }
 
-static void
-syscall_write() {
+struct file_elem {
+  struct list_elem files_elem;
+  struct file *file;
+  int fd;
+};
 
+static void write(struct intr_frame *f){
+  int fd = (int) get_argument(f->esp, 1);
+  const void *buffer = get_argument(f->esp, 2);
+  unsigned size = (unsigned) get_argument(f->esp, 3);
+  off_t bytes_written;
+  if(fd == 1) {
+    putbuf(buffer, size);
+    bytes_written = (off_t) size;
+  } else {
+    struct list_elem *e = list_begin(&thread_current()->files);	  
+    struct file_elem *file_elem = list_entry(e, struct file_elem, files_elem);
+    while(file_elem->fd != fd) {
+      e = list_next(e);
+      file_elem = list_entry(e, struct file_elem, files_elem);
+    }
+    syscall_access_memory(file_elem->file); 
+    bytes_written = file_write(file_elem->file, buffer, (off_t) size);
+  }
+  f->eax = bytes_written;
 }

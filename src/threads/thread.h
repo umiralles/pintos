@@ -111,6 +111,7 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     struct list held_locks;		/* List of locks held by thread */
+    struct list files;			/* List of file descriptors */
 #endif
 
     /* Owned by thread.c. */

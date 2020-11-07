@@ -6,6 +6,8 @@
 /* the number of implemented and working system calls in the syscall table */
 #define MAX_SYSCALLS (13)
 
+#define FD_TO_INDEX(fd) (fd - 2)
+
 /* function template for a syscall operation 
    arguments and return location found in f
 */
