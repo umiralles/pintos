@@ -1,12 +1,31 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
-#include "threads/interrupt.h"
 #include "threads/thread.h"
 
 static void syscall_handler (struct intr_frame *);
 static void syscall_acquire_lock(struct lock);
 static void syscall_access_memory(const void *);
+
+/* SYSTEM CALL FUNCTIONS */
+static void halt(struct intr_frame *f) {}
+static void exit(struct intr_frame *f);
+static void exec(struct intr_frame *f) {}
+static void wait(struct intr_frame *f) {}
+static void create(struct intr_frame *f) {}
+static void remove(struct intr_frame *f) {}
+static void open(struct intr_frame *f) {}
+static void filesize(struct intr_frame *f){}
+static void read(struct intr_frame *f) {}
+static void write(struct intr_frame *f){}
+static void seek(struct intr_frame *f) {}
+static void tell(struct intr_frame *f) {}
+static void close(struct intr_frame *f) {}
+
+static syscall_func syscalls[MAX_SYSCALLS] = {&halt, &exit, &exec, &wait,
+					       &create, &remove, &open,
+					       &filesize, &read, &write, &seek,
+					       &tell, &close};
 
 void
 syscall_init (void) 
@@ -14,11 +33,22 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
+static void *get_argument(void *esp, int arg_no) {
+  return  esp + arg_no * 4;
+}
+
 static void
-syscall_handler (struct intr_frame *f UNUSED) 
+syscall_handler (struct intr_frame *f) 
 {
-  printf ("system call!\n");
-  thread_exit ();
+  //check user mem access
+  int32_t call_no = *((int32_t *) f->esp);
+  syscalls[call_no](f);
+}
+
+static void exit(struct intr_frame *f) {
+  int status = (int) get_argument(f->esp, 1);
+  f->eax = (uint32_t) status;
+  thread_exit();
 }
 
 /* One lock in a list. */
