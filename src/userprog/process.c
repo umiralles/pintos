@@ -21,6 +21,21 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+struct argument {
+  void *arg_page;            /* page where argument is stored */
+  struct list_elem arg_elem; /* places argument in global list of arguments */
+};
+
+/* clean up argument pages */
+static void clean_arguments(struct list *arg_list) {
+  struct list_elem *e;
+  for (e = list_begin(&arg_list);
+       e != list_end(&arg_list); e = list_next(e)) {
+    struct argument *arg = list_entry(e, struct argument, arg_elem);
+    palloc_free_page(arg->arg_page);
+  }
+}
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -28,18 +43,39 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy;
+  char *fn_copy, *save_ptr;
   tid_t tid;
-
+  struct list arg_list;
+  
+  list_init(&arg_list);
+  
   /* Make a copy of FILE_NAME.
-     Otherwise there's a race between the caller and load(). */
+     Otherwise there's a race between the caller and load().
+     MAY BE REDUNDANT AFTER ARGUMENT PASSING
+  */
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  char *token;
+  for (token = strtok_r (fn_copy, " ", &save_ptr); token != NULL;
+       token = strtok_r (NULL, " ", &save_ptr)) {
+    struct argument current_arg = {0};
+
+    //TODO: put me into function
+    current_arg.arg_page = palloc_get_page(0);
+    if (current_arg.arg_page == NULL) {
+      return TID_ERROR;
+    }
+    strlcpy(current_arg.arg_page, token, PGSIZE);
+
+    list_push_back(&arg_list, &current_arg.arg_elem);
+  }
+  
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (file_name, PRI_DEFAULT, start_process, &arg_list);
+  
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -50,7 +86,9 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
-  char *file_name = file_name_;
+  struct list *arg_list = file_name_;
+  char *file_name = list_entry(list_begin(arg_list), struct argument,
+			       arg_elem).arg_page;
   struct intr_frame if_;
   bool success;
 
@@ -62,7 +100,7 @@ start_process (void *file_name_)
   success = load (file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
+  clean_arguments(&arg_list);
   if (!success) 
     thread_exit ();
 
