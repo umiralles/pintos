@@ -20,6 +20,7 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static void push_four_bytes_to_stack(struct intr_frame *if_, int32_t val);
 
 struct argument {
   char *arg;                 /* Tokenised argument from the command line */
@@ -99,12 +100,52 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
-
+  
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
 
+  struct argument *argument;
+  struct list_elem *e;
+  void *prev_esp;
+  int32_t argc = 0;
+  
+  /* Push arguments onto stack.
+     Store location of arguments on stack in the arg_list.
+     Calculates number of arguments */
+  for(e = list_rbegin(arg_list);
+      e != list_rend(arg_list); e = list_prev(e)) {
+    argument = list_entry(e, struct argument, arg_elem);
+    strlcpy(if_.esp, argument->arg, PGSIZE);
+    
+    prev_esp = if_.esp;
+    if_.esp -= strlen(argument->arg) + 1;
+    
+    argument->arg = (char*) prev_esp;
+    argc++;
+  }
+
+  /* Word align to keep stack aligned on size of char* */
+  if_.esp -= ((int) if_.esp % sizeof(char*));
+
+
+  /* Push a null pointer sentinel onto stack */
+  push_four_bytes_to_stack(&if_, 0);
+
+  /* Push pointers to each argument onto stack */
+  for(e = list_rbegin(arg_list);
+      e != list_rend(arg_list); e = list_prev(e)) {
+    argument = list_entry(e, struct argument, arg_elem);
+    
+    push_four_bytes_to_stack(&if_, (int32_t) argument->arg);
+  }
+
+  /* Push argv, argc and false return address onto stack */
+  push_four_bytes_to_stack(&if_, (int32_t) if_.esp - sizeof(char*));
+  push_four_bytes_to_stack(&if_, argc);
+  push_four_bytes_to_stack(&if_, 0);
+  
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -114,6 +155,15 @@ start_process (void *file_name_)
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
+
+/* Used for argument parsing 
+   Adds a four byte item onto the stack and updates the stack */
+static void push_four_bytes_to_stack(struct intr_frame *if_, int32_t val) {
+  int32_t *stack_ptr = if_->esp;
+  *stack_ptr = val;
+  if_->esp += sizeof(char*);
+}
+
 
 /* Waits for thread TID to die and returns its exit status. 
  * If it was terminated by the kernel (i.e. killed due to an exception), 
@@ -487,7 +537,7 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE - 12;
+        *esp = PHYS_BASE;
       else
         palloc_free_page (kpage);
     }
