@@ -15,6 +15,7 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
@@ -35,12 +36,8 @@ struct argument {
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy, *save_ptr;
-  char *arg_page, *next_arg_location; 
+  char *fn_copy;
   tid_t tid;
-  struct list arg_list;
-  
-  list_init(&arg_list);
   
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -48,37 +45,12 @@ process_execute (const char *file_name)
   if(fn_copy == NULL)
     return TID_ERROR;
   strlcpy(fn_copy, file_name, PGSIZE);
-
-  /* Create a page to keep track of the tokenised arguments. */
-  arg_page = palloc_get_page (0);
-  if(arg_page == NULL)
-    return TID_ERROR;
-
-  char *token;
-  next_arg_location = arg_page;
-  
-  for(token = strtok_r (fn_copy, " ", &save_ptr); token != NULL;
-      token = strtok_r (NULL, " ", &save_ptr)) {
-    struct argument current_arg = {0};
-
-    current_arg.arg = next_arg_location;    
-    strlcpy(current_arg.arg, token, PGSIZE);
-
-    list_push_back(&arg_list, &current_arg.arg_elem);
-
-    next_arg_location += strlen(token) + 1;
-    if(next_arg_location - arg_page > PGSIZE) {
-      return TID_ERROR;
-    }
-  }
-
-  palloc_free_page(fn_copy);
   
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create(file_name, PRI_DEFAULT, start_process, &arg_list);
-  
+  tid = thread_create(file_name, PRI_DEFAULT, start_process, fn_copy);
+
   if(tid == TID_ERROR) {
-    palloc_free_page(arg_page);
+    palloc_free_page(fn_copy);
   }
   return tid;
 }
@@ -88,23 +60,61 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
-  struct list *arg_list = file_name_;
-  char *file_name = list_entry(list_begin(arg_list), struct argument,
-			       arg_elem)->arg;
+  char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
+
+  char *save_ptr;
+  char *arg_page, *next_arg_location; 
+  struct list arg_list;
+  
+  list_init(&arg_list);
+
+  /* Create a page to keep track of the tokenised arguments. */
+  arg_page = palloc_get_page (0);
+  if(arg_page == NULL)
+    thread_exit();
+
+  char *token;
+  next_arg_location = arg_page;
+
+  struct argument *current_arg;
+  
+  for(token = strtok_r (file_name, " ", &save_ptr); token != NULL;
+      token = strtok_r (NULL, " ", &save_ptr)) {
+    //TODO: ERROR CAUSED HERE AS MULTIPLE STRUCTS NOT CREATED
+    current_arg = (struct argument*) next_arg_location;
+    
+    next_arg_location += sizeof(struct argument);
+
+    current_arg->arg = next_arg_location;    
+    strlcpy(current_arg->arg, token, PGSIZE);
+
+    list_push_back(&arg_list, &current_arg->arg_elem);
+
+    next_arg_location += strlen(token) + 1;
+    if(next_arg_location - arg_page > PGSIZE) {
+      thread_exit();
+    }
+  }
+
+  char *arg1 = list_entry(list_begin(&arg_list), struct argument,
+				      arg_elem)->arg;
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (arg1, &if_.eip, &if_.esp);
   
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
+  
+  if (!success) {
     thread_exit ();
+    palloc_free_page(arg_page);
+  }
 
   struct argument *argument;
   struct list_elem *e;
@@ -114,8 +124,8 @@ start_process (void *file_name_)
   /* Push arguments onto stack.
      Store location of arguments on stack in the arg_list.
      Calculates number of arguments */
-  for(e = list_rbegin(arg_list);
-      e != list_rend(arg_list); e = list_prev(e)) {
+  for(e = list_rbegin(&arg_list);
+      e != list_rend(&arg_list); e = list_prev(e)) {
     argument = list_entry(e, struct argument, arg_elem);
     strlcpy(if_.esp, argument->arg, PGSIZE);
     
@@ -134,8 +144,8 @@ start_process (void *file_name_)
   push_four_bytes_to_stack(&if_, 0);
 
   /* Push pointers to each argument onto stack */
-  for(e = list_rbegin(arg_list);
-      e != list_rend(arg_list); e = list_prev(e)) {
+  for(e = list_rbegin(&arg_list);
+      e != list_rend(&arg_list); e = list_prev(e)) {
     argument = list_entry(e, struct argument, arg_elem);
     
     push_four_bytes_to_stack(&if_, (int32_t) argument->arg);
@@ -145,6 +155,8 @@ start_process (void *file_name_)
   push_four_bytes_to_stack(&if_, (int32_t) if_.esp - sizeof(char*));
   push_four_bytes_to_stack(&if_, argc);
   push_four_bytes_to_stack(&if_, 0);
+
+  palloc_free_page(arg_page);
   
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -161,7 +173,7 @@ start_process (void *file_name_)
 static void push_four_bytes_to_stack(struct intr_frame *if_, int32_t val) {
   int32_t *stack_ptr = if_->esp;
   *stack_ptr = val;
-  if_->esp += sizeof(char*);
+  if_->esp -= sizeof(char*);
 }
 
 
