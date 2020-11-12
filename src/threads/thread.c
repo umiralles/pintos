@@ -116,6 +116,7 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
   initial_thread->nice = 0;                 /* Initially 0 niceness */
   initial_thread->recent_cpu = 0;           /* Initially 0 CPU useage */
+  
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -615,6 +616,12 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&t->donating_threads);
   t->waiting_lock = NULL;
   sema_init(&t->donations_sema, 1);
+  #ifdef USERPROG
+  list_init(&t->held_locks);
+  list_init(&t->files);
+  list_init(&t->child_tid_list);
+  t->tid_elem = NULL;
+  #endif
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();

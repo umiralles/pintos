@@ -12,7 +12,7 @@ static void syscall_handler (struct intr_frame *);
 /* SYSTEM CALL FUNCTIONS */
 static void syscall_halt(struct intr_frame *f UNUSED) {}
 static void syscall_exit(struct intr_frame *f);
-static void syscall_exec(struct intr_frame *f UNUSED) {}
+static void syscall_exec(struct intr_frame *f);
 static void syscall_wait(struct intr_frame *f UNUSED) {}
 static void syscall_create(struct intr_frame *f UNUSED) {}
 static void syscall_remove(struct intr_frame *f UNUSED) {}
@@ -52,9 +52,29 @@ static void syscall_handler(struct intr_frame *f) {
 }
 
 static void syscall_exit(struct intr_frame *f) {
-  int status = *((int *) get_argument(f->esp, 1));
+  int status = GET_ARGUMENT_VALUE(f, int, 1);
+
+  /* Ups the semaphore and exit_status in its tid_elem
+     for if its parent calls process_wait on it */
+  struct tid_elem *tid_elem = thread_current()->tid_elem;
+  tid_elem->exit_status = status;
+  sema_up(&tid_elem->child_semaphore);
+  
   return_value_to_frame(f, (uint32_t) status);
   thread_exit();
+}
+
+static void syscall_exec(struct intr_frame *f) {
+  // const char *cmd_line = GET_ARGUMENT_VALUE(f, char *, 1);
+  
+  /* Add tid_elem corresponding to child to the current thread's child_tid_list */
+  /* TODO for process_wait: */
+  /* create child
+     create tid_elem (initialise sema) + add to list
+     set child's tid pointer
+     -> how to get the child's pointer to set it's semaphore pointer?
+  */
+  
 }
 
 static void syscall_write(struct intr_frame *f) {

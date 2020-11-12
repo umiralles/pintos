@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -100,7 +101,7 @@ process_wait (tid_t child_tid)
       match = true;
     }
     
-    curr = list_next(curr)
+    curr = list_next(curr);
   }
 
   if (match) {
@@ -109,7 +110,7 @@ process_wait (tid_t child_tid)
     }
 
     int exit_status = curr_elem->exit_status;
-    list_remove(curr_elem);
+    list_remove(curr);
     free(curr_elem);
     return exit_status;
     
