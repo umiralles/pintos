@@ -118,7 +118,6 @@ start_process (void *file_name_)
 
   struct argument *argument;
   struct list_elem *e;
-  void *prev_esp;
   int32_t argc = 0;
   
   /* Push arguments onto stack.
@@ -127,12 +126,10 @@ start_process (void *file_name_)
   for(e = list_rbegin(&arg_list);
       e != list_rend(&arg_list); e = list_prev(e)) {
     argument = list_entry(e, struct argument, arg_elem);
+    if_.esp -= strlen(argument->arg) + 1;
     strlcpy(if_.esp, argument->arg, PGSIZE);
     
-    prev_esp = if_.esp;
-    if_.esp -= strlen(argument->arg) + 1;
-    
-    argument->arg = (char*) prev_esp;
+    argument->arg = (char*) if_.esp;
     argc++;
   }
 
@@ -152,9 +149,10 @@ start_process (void *file_name_)
   }
 
   /* Push argv, argc and false return address onto stack */
-  push_four_bytes_to_stack(&if_, (int32_t) if_.esp - sizeof(char*));
+  push_four_bytes_to_stack(&if_, (int32_t) if_.esp + sizeof(char*));
   push_four_bytes_to_stack(&if_, argc);
-  push_four_bytes_to_stack(&if_, 0);
+  int32_t *dummy_esp = if_.esp;
+  *dummy_esp = 0;
 
   palloc_free_page(arg_page);
   
