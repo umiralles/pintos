@@ -4,8 +4,8 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-#include "synch.h"
 
+#include "synch.h"
 #include "threads/fixed-point.h"
 
 /* States in a thread's life cycle. */
@@ -26,6 +26,18 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
+/* Element for use in a list of tids and exit statuses of terminated threads.
+   Used in the thread struct and userprog/process.c */
+// exit_status and child could be made a union?
+struct tid_elem {
+  int tid;                            /* tid of a terminated thread */
+  struct thread *child;               /* Thread corresponding to the tid */
+  struct semaphore child_semaphore;   /* Semaphore used in process_wait to
+					 halt the parent thread */
+  int exit_status;                    /* Exit status of thread tid */
+  struct list_elem elem;              /* Element to store in a list */
+}
 
 /* A kernel thread or user process.
 
@@ -112,6 +124,10 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
     struct list held_locks;		/* List of locks held by thread */
     struct list files;			/* List of file descriptors */
+    struct list child_tid_list;         /* List of elements in tid_elem structs
+					   corresponding to children */
+    struct semaphore *child_semaphore;  /* Pointer to this thread's semaphore in
+					   its parent's child_tid_list */
 #endif
 
     /* Owned by thread.c. */

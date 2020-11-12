@@ -86,12 +86,37 @@ start_process (void *file_name_)
  * This function will be implemented in task 2.
  * For now, it does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  // allows tests to be loaded
-  // correct implementation to be done
-  while(true);
-  return -1;
+  struct thread *t = thread_current();
+  
+  struct list_elem *curr = list_begin(&t->child_tid_list);
+  struct tid_elem *curr_elem;
+  bool match = false;
+  while(curr != list_end(&t->child_tid_list) && !match) {
+    curr_elem = list_entry(curr, struct tid_elem, elem);
+
+    if (curr_elem->tid == child_tid) {
+      match = true;
+    }
+    
+    curr = list_next(curr)
+  }
+
+  if (match) {
+    if (curr_elem->child) {
+      sema_down(&curr_elem->child_semaphore);
+    }
+
+    int exit_status = curr_elem->exit_status;
+    list_remove(curr_elem);
+    free(curr_elem);
+    return exit_status;
+    
+  } else {
+    return -1;
+    
+  }
 }
 
 /* Free the current process's resources. */
