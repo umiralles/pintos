@@ -82,16 +82,15 @@ start_process (void *file_name_)
   
   for(token = strtok_r (file_name, " ", &save_ptr); token != NULL;
       token = strtok_r (NULL, " ", &save_ptr)) {
-    //TODO: ERROR CAUSED HERE AS MULTIPLE STRUCTS NOT CREATED
     current_arg = (struct argument*) next_arg_location;
     
     next_arg_location += sizeof(struct argument);
-
+    
     current_arg->arg = next_arg_location;    
     strlcpy(current_arg->arg, token, PGSIZE);
-
+    
     list_push_back(&arg_list, &current_arg->arg_elem);
-
+    
     next_arg_location += strlen(token) + 1;
     if(next_arg_location - arg_page > PGSIZE) {
       thread_exit();
@@ -149,10 +148,11 @@ start_process (void *file_name_)
   }
 
   /* Push argv, argc and false return address onto stack */
-  push_four_bytes_to_stack(&if_, (int32_t) if_.esp + sizeof(char*));
+  push_four_bytes_to_stack(&if_, (int32_t) if_.esp);
   push_four_bytes_to_stack(&if_, argc);
-  int32_t *dummy_esp = if_.esp;
-  *dummy_esp = 0;
+  //int32_t *dummy_esp = if_.esp;
+  //*dummy_esp = 0;
+  push_four_bytes_to_stack(&if_, (int32_t) 0);
 
   palloc_free_page(arg_page);
   
@@ -169,9 +169,9 @@ start_process (void *file_name_)
 /* Used for argument parsing 
    Adds a four byte item onto the stack and updates the stack */
 static void push_four_bytes_to_stack(struct intr_frame *if_, int32_t val) {
+  if_->esp -= sizeof(char*);
   int32_t *stack_ptr = if_->esp;
   *stack_ptr = val;
-  if_->esp -= sizeof(char*);
 }
 
 
