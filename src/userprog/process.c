@@ -51,6 +51,9 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
+  /* Sets the kernel_mode to false to imply a user process */
+  thread_current()->kernel_mode = false;
+
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
@@ -66,6 +69,9 @@ start_process (void *file_name_)
   palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
+
+  /* If load is complete, sema_up to allow the parent to continue */
+  sema_up(&thread_current()->tid_elem->child_semaphore);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -90,6 +96,10 @@ int
 process_wait (tid_t child_tid) 
 {
   struct thread *t = thread_current();
+
+  if (t->kernel_mode) {
+    return -1;
+  }
   
   struct list_elem *curr = list_begin(&t->child_tid_list);
   struct tid_elem *curr_elem;

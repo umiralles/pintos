@@ -29,13 +29,11 @@ typedef int tid_t;
 
 /* Element for use in a list of tids and exit statuses of terminated threads.
    Used in the thread struct and userprog/process.c */
-// exit_status and child could be made a union?
 struct tid_elem {
-  tid_t tid;                            /* tid of a terminated thread */
-  struct thread *child;               /* Thread corresponding to the tid */
+  tid_t tid;                          /* tid of a terminated thread */
+  int exit_status;                    /* Exit status of thread tid */
   struct semaphore child_semaphore;   /* Semaphore used in process_wait to
 					 halt the parent thread */
-  int exit_status;                    /* Exit status of thread tid */
   struct list_elem elem;              /* Element to store in a list */
 };
 
@@ -121,11 +119,12 @@ struct thread
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
+    bool kernel_mode;
     uint32_t *pagedir;                  /* Page directory. */
     struct list held_locks;		/* List of locks held by thread */
     struct list files;			/* List of file descriptors */
     struct list child_tid_list;         /* List of elements in tid_elem structs
-					   corresponding to children */
+					   corresponding to children */ 
     struct tid_elem *tid_elem;          /* Pointer to this thread's tid_elem in
 					   its parent's child_tid_list */
 #endif

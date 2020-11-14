@@ -5,6 +5,7 @@
 #include "filesys/off_t.h"
 #include "filesys/file.h"
 #include "userprog/pagedir.h"
+#include "userprog/process.h"
 #include "userprog/syscall.h"
 
 static void syscall_handler (struct intr_frame *);
@@ -61,20 +62,35 @@ static void syscall_exit(struct intr_frame *f) {
   sema_up(&tid_elem->child_semaphore);
   
   return_value_to_frame(f, (uint32_t) status);
-  thread_exit();
+  process_exit();
 }
 
+// something to do with kernel_mode?
 static void syscall_exec(struct intr_frame *f) {
-  // const char *cmd_line = GET_ARGUMENT_VALUE(f, char *, 1);
+  const char *cmd_line = GET_ARGUMENT_VALUE(f, char *, 1);
+
+  int child_tid = process_execute(cmd_line);
+
+  struct tid_elem *curr;
+  struct list_elem *curr_elem = list_begin(&thread_current()->child_tid_list);
+  bool match = false;
+  while (curr_elem != list_end(&thread_current()->child_tid_list) && !match) {
+    curr = list_entry(curr_elem, struct tid_elem, elem);
+    
+    if (curr->tid == child_tid) {
+      match = true;
+    }
+
+    curr_elem = list_next(curr_elem);
+  }
+
+  if (!match) {
+    // some error that exits the program?
+  } else {
+    sema_down(&curr->child_semaphore);
+  }
   
-  /* Add tid_elem corresponding to child to the current thread's child_tid_list */
-  /* TODO for process_wait: */
-  /* create child
-     create tid_elem (initialise sema) + add to list
-     set child's tid pointer
-     -> how to get the child's pointer to set it's semaphore pointer?
-  */
-  
+  return_value_to_frame(f, (uint32_t) child_tid);
 }
 
 static void syscall_write(struct intr_frame *f) {
