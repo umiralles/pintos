@@ -83,7 +83,6 @@ static void syscall_write(struct intr_frame *f) {
 static void syscall_access_memory(const void *vaddr) {
   struct thread *t = thread_current();
   if(!(is_user_vaddr(vaddr) && pagedir_get_page(t->pagedir, vaddr))) {
-    pagedir_destroy(t->pagedir);
     struct list_elem *e;
     for(e = list_begin (&t->held_locks);
 	e != list_end (&t->held_locks);
@@ -91,6 +90,7 @@ static void syscall_access_memory(const void *vaddr) {
       struct lock_elem *elem = list_entry(e, struct lock_elem, elem);
       lock_release(elem->lock);
     }
+    pagedir_destroy(t->pagedir);  
     thread_exit();
   }
 }
