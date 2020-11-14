@@ -103,7 +103,6 @@ static void *get_argument(void *esp, int arg_no) {
 }
 
 static void return_value_to_frame(struct intr_frame *f, uint32_t val) {
-  syscall_access_memory(&f->eax);
   f->eax = val;
 }
 
