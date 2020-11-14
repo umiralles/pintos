@@ -15,7 +15,7 @@ static void syscall_exit(struct intr_frame *f);
 static void syscall_exec(struct intr_frame *f UNUSED) {}
 static void syscall_wait(struct intr_frame *f UNUSED) {}
 static void syscall_create(struct intr_frame *f);
-static void syscall_remove(struct intr_frame *f UNUSED) {}
+static void syscall_remove(struct intr_frame *f);
 static void syscall_open(struct intr_frame *f UNUSED) {}
 static void syscall_filesize(struct intr_frame *f UNUSED) {}
 static void syscall_read(struct intr_frame *f UNUSED) {}
@@ -31,6 +31,7 @@ static void syscall_access_memory(const void *vaddr);
 static void *get_argument(void *esp, int arg_no);
 static void return_value_to_frame(struct intr_frame *f, uint32_t val);
 static void syscall_acquire_lock(struct lock *);
+static void syscall_release_lock(struct lock *);
 
 /* Jump table used to call a syscall */
 static syscall_func syscalls[MAX_SYSCALLS] = {&syscall_halt, &syscall_exit,
@@ -69,7 +70,19 @@ static void syscall_create(struct intr_frame *f) {
   const char *file = GET_ARGUMENT_VALUE(f, (char *), 1);
   uint32_t initial_size = GET_ARGUMENT_VALUE(f, uint32_t, 2);
 
+  syscall_acquire_lock(&filesys_lock);
   bool res = filesys_create(file, (off_t) initial_size); 
+  syscall_release_lock(&filesys_lock);
+  
+  return_value_to_frame(f, (uint32_t) res);
+}
+
+static void syscall_remove(struct intr_frame *f) {
+  const char *file = GET_ARGUMENT_VALUE(f, (char *), 1);
+
+  syscall_acquire_lock(&filesys_lock);
+  bool res = filesys_remove(file);
+  syscall_release_lock(&filesys_lock);
 
   return_value_to_frame(f, (uint32_t) res);
 }
@@ -138,3 +151,7 @@ static void syscall_acquire_lock(struct lock *lock) {
   list_push_back(&thread_current()->held_locks, &lock_elem.elem);
 }
 
+//TODO: make this edit the list of thread's held locks
+static void syscall_release_lock(struct lock *) {
+  lock_release(lock);
+}
