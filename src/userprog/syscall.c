@@ -2,10 +2,13 @@
 #include <syscall-nr.h>
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 #include "filesys/off_t.h"
 #include "filesys/file.h"
+#include "filesys/filesys.h"
 #include "userprog/pagedir.h"
 #include "userprog/syscall.h"
+#include "devices/shutdown.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -16,7 +19,7 @@ static void syscall_exec(struct intr_frame *f UNUSED) {}
 static void syscall_wait(struct intr_frame *f UNUSED) {}
 static void syscall_create(struct intr_frame *f);
 static void syscall_remove(struct intr_frame *f);
-static void syscall_open(struct intr_frame *f UNUSED) {}
+static void syscall_open(struct intr_frame *f);
 static void syscall_filesize(struct intr_frame *f UNUSED) {}
 static void syscall_read(struct intr_frame *f UNUSED) {}
 static void syscall_write(struct intr_frame *f);
@@ -56,7 +59,7 @@ static void syscall_handler(struct intr_frame *f) {
   syscalls[call_no](f);
 }
 
-static void syscall_halt(struct intr_frame *f) {
+static void syscall_halt(struct intr_frame *f UNUSED) {
   shutdown_power_off();  
 }
 
@@ -67,7 +70,7 @@ static void syscall_exit(struct intr_frame *f) {
 }
 
 static void syscall_create(struct intr_frame *f) {
-  const char *file = GET_ARGUMENT_VALUE(f, (char *), 1);
+  const char *file = GET_ARGUMENT_VALUE(f, char *, 1);
   uint32_t initial_size = GET_ARGUMENT_VALUE(f, uint32_t, 2);
 
   syscall_acquire_lock(&filesys_lock);
@@ -78,13 +81,47 @@ static void syscall_create(struct intr_frame *f) {
 }
 
 static void syscall_remove(struct intr_frame *f) {
-  const char *file = GET_ARGUMENT_VALUE(f, (char *), 1);
+  const char *file = GET_ARGUMENT_VALUE(f, char *, 1);
 
   syscall_acquire_lock(&filesys_lock);
   bool res = filesys_remove(file);
   syscall_release_lock(&filesys_lock);
 
   return_value_to_frame(f, (uint32_t) res);
+}
+
+static void syscall_open(struct intr_frame *f) {
+  const char *name = GET_ARGUMENT_VALUE(f, char *, 1);
+  int fd = -1;
+
+  syscall_acquire_lock(&filesys_lock);
+  struct file *file = filesys_open(name);
+
+  if(file != NULL) {
+    struct thread *t = thread_current();
+
+    /* TODO: free this memory! 
+       will be done in process_exit when we merge with other team 
+    */
+    struct file_elem *current_file = malloc(sizeof(struct file_elem));
+
+    /* If process runs out of memory, kill it */
+    if(current_file == NULL) {
+      thread_exit();
+    }
+    
+    fd = t->next_available_fd;
+    t->next_available_fd++;
+
+    current_file->fd = fd;
+    current_file->file = file;
+
+    list_push_back(&t->files, &current_file->elem);
+  }
+
+  syscall_release_lock(&filesys_lock);
+
+  return_value_to_frame(f, (uint32_t) fd);  
 }
 
 static void syscall_write(struct intr_frame *f) {
@@ -152,6 +189,6 @@ static void syscall_acquire_lock(struct lock *lock) {
 }
 
 //TODO: make this edit the list of thread's held locks
-static void syscall_release_lock(struct lock *) {
+static void syscall_release_lock(struct lock *lock) {
   lock_release(lock);
 }
