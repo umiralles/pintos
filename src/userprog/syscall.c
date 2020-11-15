@@ -2,6 +2,7 @@
 #include <syscall-nr.h>
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 #include "filesys/off_t.h"
 #include "filesys/file.h"
 #include "userprog/pagedir.h"
@@ -55,12 +56,20 @@ static void syscall_handler(struct intr_frame *f) {
 static void syscall_exit(struct intr_frame *f) {
   int status = GET_ARGUMENT_VALUE(f, int, 1);
 
-  /* Ups the semaphore and exit_status in its tid_elem
+ /* Ups the semaphore and exit_status in its tid_elem
      for if its parent calls process_wait on it */
+  lock_acquire(&thread_current()->tid_elem->tid_elem_lock);
   struct tid_elem *tid_elem = thread_current()->tid_elem;
-  tid_elem->exit_status = status;
-  sema_up(&tid_elem->child_semaphore);
-  
+  if(tid_elem->process_dead) {
+    lock_release(&thread_current()->tid_elem->tid_elem_lock);
+    free(tid_elem);
+  } else {
+    tid_elem->exit_status = status;
+    tid_elem->process_dead = true;
+    sema_up(&tid_elem->child_semaphore);
+    lock_release(&thread_current()->tid_elem->tid_elem_lock);
+  }
+
   return_value_to_frame(f, (uint32_t) status);
   process_exit();
 }

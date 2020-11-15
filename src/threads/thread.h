@@ -34,7 +34,10 @@ struct tid_elem {
   int exit_status;                    /* Exit status of thread tid */
   struct semaphore child_semaphore;   /* Semaphore used in process_wait to
 					 halt the parent thread */
+  struct lock tid_elem_lock;          /* Lock shared between parent and child */
   struct list_elem elem;              /* Element to store in a list */
+  bool process_dead;		      /* True if one of the processes
+					 terminated */
 };
 
 /* A kernel thread or user process.

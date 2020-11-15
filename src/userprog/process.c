@@ -115,7 +115,7 @@ process_wait (tid_t child_tid)
   }
 
   if (match) {
-    if (curr_elem->child) {
+    if (!curr_elem->process_dead) {
       sema_down(&curr_elem->child_semaphore);
     }
 
@@ -142,7 +142,20 @@ process_exit (void)
   pd = cur->pagedir;
   if (pd != NULL) 
     {
-      /* Correct ordering here is crucial.  We must set
+      struct list_elem *child_elem = list_begin(&cur->child_tid_list);
+      while(child_elem != list_end(&cur->child_tid_list)) {
+	struct tid_elem *child = list_entry(child_elem, struct tid_elem, elem);	
+	lock_acquire(&child->tid_elem_lock);
+	if(child->process_dead) {
+	  lock_release(&child->tid_elem_lock);	
+	  free(child);
+	} else {
+   	  child->process_dead = true;
+	  lock_release(&child->tid_elem_lock);
+	}
+	child_elem = list_next(child_elem);
+      }
+      	 /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
          so that a timer interrupt can't switch back to the
          process page directory.  We must activate the base page
