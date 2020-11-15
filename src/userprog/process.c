@@ -203,7 +203,6 @@ process_exit (void)
 
   /* Frees all memory associated with open files */
   struct list_elem *current;
-  struct list_elem *next;
   struct file_elem *current_file;
   
   while (!list_empty(&t->files)) {

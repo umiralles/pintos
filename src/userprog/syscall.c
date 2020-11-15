@@ -23,7 +23,7 @@ static void syscall_open(struct intr_frame *f);
 static void syscall_filesize(struct intr_frame *f);
 static void syscall_read(struct intr_frame *f UNUSED) {}
 static void syscall_write(struct intr_frame *f);
-static void syscall_seek(struct intr_frame *f UNUSED) {}
+static void syscall_seek(struct intr_frame *f);
 static void syscall_tell(struct intr_frame *f);
 static void syscall_close(struct intr_frame *f UNUSED) {}
 
@@ -167,22 +167,38 @@ static void syscall_write(struct intr_frame *f) {
   f->eax = bytes_written;
 }
 
-static void syscall_tell(struct intr_frame *f) {
+static void syscall_seek(struct intr_frame *f) {
   int fd = GET_ARGUMENT_VALUE(f, int, 1);
-  uint32_t position = -1;
+  unsigned position = GET_ARGUMENT_VALUE(f, unsigned, 2);
 
   struct thread *t = thread_current();
 
   struct file_elem *file = get_file(t, fd);
 
-  /* If a file is found, get its size */
+  /* If a file is found, set its position to the position argument */
   if(file != NULL) {
     syscall_acquire_lock(&filesys_lock);
-    position = file_tell(file->file);
+    file_seek(file->file, (off_t) position);
+    syscall_release_lock(&filesys_lock);
+  }
+}
+
+static void syscall_tell(struct intr_frame *f) {
+  int fd = GET_ARGUMENT_VALUE(f, int, 1);
+  unsigned position = -1;
+
+  struct thread *t = thread_current();
+
+  struct file_elem *file = get_file(t, fd);
+
+  /* If a file is found, get next byte to be read */
+  if(file != NULL) {
+    syscall_acquire_lock(&filesys_lock);
+    position = (unsigned) file_tell(file->file);
     syscall_release_lock(&filesys_lock);
   }
   
-  return_value_to_frame(f, position);
+  return_value_to_frame(f, (uint32_t) position);
 }
 
 /* MEMORY ACCESS FUNCTION */
