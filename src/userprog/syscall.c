@@ -20,11 +20,11 @@ static void syscall_wait(struct intr_frame *f UNUSED) {}
 static void syscall_create(struct intr_frame *f);
 static void syscall_remove(struct intr_frame *f);
 static void syscall_open(struct intr_frame *f);
-static void syscall_filesize(struct intr_frame *f UNUSED) {}
+static void syscall_filesize(struct intr_frame *f);
 static void syscall_read(struct intr_frame *f UNUSED) {}
 static void syscall_write(struct intr_frame *f);
 static void syscall_seek(struct intr_frame *f UNUSED) {}
-static void syscall_tell(struct intr_frame *f UNUSED) {}
+static void syscall_tell(struct intr_frame *f);
 static void syscall_close(struct intr_frame *f UNUSED) {}
 
 /* MEMORY ACCESS FUNCTION */
@@ -35,6 +35,7 @@ static void *get_argument(void *esp, int arg_no);
 static void return_value_to_frame(struct intr_frame *f, uint32_t val);
 static void syscall_acquire_lock(struct lock *);
 static void syscall_release_lock(struct lock *);
+static struct file_elem* get_file(struct thread *t, int fd);
 
 /* Jump table used to call a syscall */
 static syscall_func syscalls[MAX_SYSCALLS] = {&syscall_halt, &syscall_exit,
@@ -100,9 +101,6 @@ static void syscall_open(struct intr_frame *f) {
   if(file != NULL) {
     struct thread *t = thread_current();
 
-    /* TODO: free this memory! 
-       will be done in process_exit when we merge with other team 
-    */
     struct file_elem *current_file = malloc(sizeof(struct file_elem));
 
     /* If process runs out of memory, kill it */
@@ -122,6 +120,26 @@ static void syscall_open(struct intr_frame *f) {
   syscall_release_lock(&filesys_lock);
 
   return_value_to_frame(f, (uint32_t) fd);  
+}
+
+/* Returns either the size of a file in bytes 
+   or -1 if the file cannot be accessed
+ */
+static void syscall_filesize(struct intr_frame *f) {
+  int fd = GET_ARGUMENT_VALUE(f, int, 1);
+  int filesize = -1;
+  struct thread *t = thread_current();
+
+  struct file_elem *file = get_file(t, fd);
+
+  /* If a file is found, get its size */
+  if(file != NULL) {
+    syscall_acquire_lock(&filesys_lock);
+    filesize = file_length(file->file);
+    syscall_release_lock(&filesys_lock);
+  }
+  
+  return_value_to_frame(f, (uint32_t) filesize);
 }
 
 static void syscall_write(struct intr_frame *f) {
@@ -147,6 +165,24 @@ static void syscall_write(struct intr_frame *f) {
   }
   
   f->eax = bytes_written;
+}
+
+static void syscall_tell(struct intr_frame *f) {
+  int fd = GET_ARGUMENT_VALUE(f, int, 1);
+  uint32_t position = -1;
+
+  struct thread *t = thread_current();
+
+  struct file_elem *file = get_file(t, fd);
+
+  /* If a file is found, get its size */
+  if(file != NULL) {
+    syscall_acquire_lock(&filesys_lock);
+    position = file_tell(file->file);
+    syscall_release_lock(&filesys_lock);
+  }
+  
+  return_value_to_frame(f, position);
 }
 
 /* MEMORY ACCESS FUNCTION */
@@ -183,4 +219,34 @@ static void syscall_acquire_lock(struct lock *lock) {
 //TODO: make this edit the list of thread's held locks
 static void syscall_release_lock(struct lock *lock) {
   lock_release(lock);
+}
+
+/* Takes in a thread and a file descriptor
+   Returns the file with file descriptor equal to fd
+   Returns NULL if no such file could be found
+*/
+static struct file_elem* get_file(struct thread *t, int fd) {
+  if(fd <= STDOUT_FILENO) {
+    return NULL;
+  }
+
+  /* fd cannot exist so we short circuit the list traversal and return null */
+  if(fd >= t->next_available_fd) {
+    return NULL;
+  }
+
+  struct file_elem *current;
+  struct list_elem *e;
+
+  /* Attempt to find a matching fd in the thread's files list */
+  for(e = list_begin(&t->files); e != list_end(&t->files); e = list_next(e)) {
+    current = list_entry(e, struct file_elem, elem);
+    if (current->fd == fd) {
+      return current;
+    }
+  }
+
+  /* Nothing found */
+  return NULL;
+  
 }
