@@ -116,6 +116,11 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
   initial_thread->nice = 0;                 /* Initially 0 niceness */
   initial_thread->recent_cpu = 0;           /* Initially 0 CPU useage */
+
+  #ifdef USERPROG
+  initial_thread->kernel_mode = true;
+  #endif
+  
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -241,6 +246,16 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+
+  /* Initialise thread for userprog system */
+  #ifdef USERPROG
+  t->kernel_mode = thread_current()->kernel_mode;
+  t->tid_elem = malloc(sizeof(struct tid_elem));
+  t->tid_elem->tid = tid;
+  t->tid_elem->exit_status = -1;
+  sema_init(&t->tid_elem->child_semaphore, 1);
+  list_push_back(&thread_current()->child_tid_list, &t->tid_elem->elem);
+  #endif
 
   /* Initialise thread for mlfqs scheduling */
   if(thread_mlfqs) {
@@ -620,8 +635,10 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&t->held_locks);
   list_init(&t->files);
   t->next_available_fd = STDOUT_FILENO + 1;
-#endif  
-  
+  list_init(&t->child_tid_list);
+  t->tid_elem = NULL;
+#endif
+
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();

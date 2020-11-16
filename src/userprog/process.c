@@ -19,6 +19,7 @@
 #include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -61,6 +62,9 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
+  /* Sets the kernel_mode to false to imply a user process */
+  thread_current()->kernel_mode = false;
+
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
@@ -156,7 +160,10 @@ start_process (void *file_name_)
   push_four_bytes_to_stack(&if_, (int32_t) 0);
 
   palloc_free_page(arg_page);
-  
+
+  /* If load is complete, sema_up to allow the parent to continue */
+  sema_up(&thread_current()->tid_elem->child_semaphore);
+
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -186,12 +193,41 @@ static void push_four_bytes_to_stack(struct intr_frame *if_, int32_t val) {
  * This function will be implemented in task 2.
  * For now, it does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  // allows tests to be loaded
-  // correct implementation to be done
-  while(true);
-  return -1;
+  struct thread *t = thread_current();
+
+  if (t->kernel_mode) {
+    return -1;
+  }
+  
+  struct list_elem *curr = list_begin(&t->child_tid_list);
+  struct tid_elem *curr_elem;
+  bool match = false;
+  while(curr != list_end(&t->child_tid_list) && !match) {
+    curr_elem = list_entry(curr, struct tid_elem, elem);
+
+    if (curr_elem->tid == child_tid) {
+      match = true;
+    }
+    
+    curr = list_next(curr);
+  }
+
+  if (match) {
+    if (!curr_elem->process_dead) {
+      sema_down(&curr_elem->child_semaphore);
+    }
+
+    int exit_status = curr_elem->exit_status;
+    list_remove(curr);
+    free(curr_elem);
+    return exit_status;
+    
+  } else {
+    return -1;
+    
+  }
 }
 
 /* Free the current process's resources. */
@@ -225,15 +261,28 @@ process_exit (void)
   pd = t->pagedir;
   if (pd != NULL) 
     {
-      /* To be added when merged with processWaitImplementation*/
-      /*
+      /* Printing termination messages */
       int MAX_INT_LEN = 10;
       int max_len = strlen(": exit()\n") + strlen(cur->name) + MAX_INT_LEN;
       char buffer[max_len];
       int length = snprintf(buffer, "%s: exit(%d)\n", cur->name,
       		    cur->tid_elem->exit_status);
       write(STDOUT_FILENO, buffer, length);
-      /*
+
+      struct list_elem *child_elem = list_begin(&cur->child_tid_list);
+      while(child_elem != list_end(&cur->child_tid_list)) {
+	struct tid_elem *child = list_entry(child_elem, struct tid_elem, elem);	
+	lock_acquire(&child->tid_elem_lock);
+	if(child->process_dead) {
+	  lock_release(&child->tid_elem_lock);	
+	  free(child);
+	} else {
+   	  child->process_dead = true;
+	  lock_release(&child->tid_elem_lock);
+	}
+	child_elem = list_next(child_elem);
+      }
+
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
          so that a timer interrupt can't switch back to the

@@ -4,8 +4,8 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-#include "synch.h"
 
+#include "synch.h"
 #include "threads/fixed-point.h"
 
 /* States in a thread's life cycle. */
@@ -26,6 +26,19 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
+/* Element for use in a list of tids and exit statuses of terminated threads.
+   Used in the thread struct and userprog/process.c */
+struct tid_elem {
+  tid_t tid;                          /* tid of a terminated thread */
+  int exit_status;                    /* Exit status of thread tid */
+  struct semaphore child_semaphore;   /* Semaphore used in process_wait to
+					 halt the parent thread */
+  struct lock tid_elem_lock;          /* Lock shared between parent and child */
+  struct list_elem elem;              /* Element to store in a list */
+  bool process_dead;		      /* True if one of the processes
+					 terminated */
+};
 
 /* A kernel thread or user process.
 
@@ -109,10 +122,15 @@ struct thread
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
+    bool kernel_mode;
     uint32_t *pagedir;                  /* Page directory. */
     struct list held_locks;		/* List of locks held by thread */
     struct list files;			/* List of file descriptors */
     int next_available_fd;              /* next available file descriptor */
+    struct list child_tid_list;         /* List of elements in tid_elem structs
+					   corresponding to children */ 
+    struct tid_elem *tid_elem;          /* Pointer to this thread's tid_elem in
+					   its parent's child_tid_list */
 #endif
 
     /* Owned by thread.c. */
