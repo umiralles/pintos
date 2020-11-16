@@ -248,14 +248,15 @@ thread_create (const char *name, int priority,
   tid = t->tid = allocate_tid ();
 
   /* Initialise thread for userprog system */
-  #ifdef USERPROG
+#ifdef USERPROG
   t->kernel_mode = thread_current()->kernel_mode;
   t->tid_elem = malloc(sizeof(struct tid_elem));
   t->tid_elem->tid = tid;
   t->tid_elem->exit_status = -1;
   sema_init(&t->tid_elem->child_semaphore, 1);
+  lock_init(&t->tid_elem->tid_elem_lock);
   list_push_back(&thread_current()->child_tid_list, &t->tid_elem->elem);
-  #endif
+#endif
 
   /* Initialise thread for mlfqs scheduling */
   if(thread_mlfqs) {

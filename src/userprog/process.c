@@ -23,7 +23,7 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
-static void push_four_bytes_to_stack(struct intr_frame *if_, int32_t val);
+static void push_word_to_stack(struct intr_frame *if_, int32_t val);
 
 struct argument {
   char *arg;                 /* Tokenised argument from the command line */
@@ -77,8 +77,11 @@ start_process (void *file_name_)
 
   /* Create a page to keep track of the tokenised arguments. */
   arg_page = palloc_get_page (0);
-  if(arg_page == NULL)
+  if(arg_page == NULL) {
+    /* Sema up to let parent continue at failure */
+    sema_up(&thread_current()->tid_elem->child_semaphore);
     thread_exit();
+  }
 
   char *token;
   next_arg_location = arg_page;
@@ -98,6 +101,8 @@ start_process (void *file_name_)
     
     next_arg_location += strlen(token) + 1;
     if(next_arg_location - arg_page > PGSIZE) {
+      /* Sema up to let parent continue at failure */
+      sema_up(&thread_current()->tid_elem->child_semaphore);
       thread_exit();
     }
   }
@@ -142,22 +147,20 @@ start_process (void *file_name_)
 
 
   /* Push a null pointer sentinel onto stack */
-  push_four_bytes_to_stack(&if_, 0);
+  push_word_to_stack(&if_, 0);
 
   /* Push pointers to each argument onto stack */
   for(e = list_rbegin(&arg_list);
       e != list_rend(&arg_list); e = list_prev(e)) {
     argument = list_entry(e, struct argument, arg_elem);
     
-    push_four_bytes_to_stack(&if_, (int32_t) argument->arg);
+    push_word_to_stack(&if_, (int32_t) argument->arg);
   }
 
   /* Push argv, argc and false return address onto stack */
-  push_four_bytes_to_stack(&if_, (int32_t) if_.esp);
-  push_four_bytes_to_stack(&if_, argc);
-  //int32_t *dummy_esp = if_.esp;
-  //*dummy_esp = 0;
-  push_four_bytes_to_stack(&if_, (int32_t) 0);
+  push_word_to_stack(&if_, (int32_t) if_.esp);
+  push_word_to_stack(&if_, argc);
+  push_word_to_stack(&if_, (int32_t) 0);
 
   palloc_free_page(arg_page);
 
@@ -175,8 +178,8 @@ start_process (void *file_name_)
 }
 
 /* Used for argument parsing 
-   Adds a four byte item onto the stack and updates the stack */
-static void push_four_bytes_to_stack(struct intr_frame *if_, int32_t val) {
+   Adds a four byte item (word) onto the stack and updates the stack */
+static void push_word_to_stack(struct intr_frame *if_, int32_t val) {
   if_->esp -= sizeof(char*);
   int32_t *stack_ptr = if_->esp;
   *stack_ptr = val;
@@ -197,6 +200,7 @@ process_wait (tid_t child_tid)
 {
   struct thread *t = thread_current();
 
+  // Can probably be deleted
   if (t->kernel_mode) {
     return -1;
   }
@@ -226,7 +230,6 @@ process_wait (tid_t child_tid)
     
   } else {
     return -1;
-    
   }
 }
 
@@ -262,15 +265,20 @@ process_exit (void)
   if (pd != NULL) 
     {
       /* Printing termination messages */
+      /*
       int MAX_INT_LEN = 10;
-      int max_len = strlen(": exit()\n") + strlen(cur->name) + MAX_INT_LEN;
+      int max_len = strlen(": exit()\n") + strlen(t->name) + MAX_INT_LEN;
       char buffer[max_len];
-      int length = snprintf(buffer, "%s: exit(%d)\n", cur->name,
-      		    cur->tid_elem->exit_status);
+      int length = snprintf(buffer, max_len, "%s: exit(%d)\n", t->name,
+        	    t->tid_elem->exit_status);
+      
       write(STDOUT_FILENO, buffer, length);
+      */
 
-      struct list_elem *child_elem = list_begin(&cur->child_tid_list);
-      while(child_elem != list_end(&cur->child_tid_list)) {
+      printf("%s: exit(%d)\n", t->name, t->tid_elem->exit_status);
+
+      struct list_elem *child_elem = list_begin(&t->child_tid_list);
+      while(child_elem != list_end(&t->child_tid_list)) {
 	struct tid_elem *child = list_entry(child_elem, struct tid_elem, elem);	
 	lock_acquire(&child->tid_elem_lock);
 	if(child->process_dead) {

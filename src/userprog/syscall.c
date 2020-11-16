@@ -92,6 +92,8 @@ static void syscall_exec(struct intr_frame *f) {
 
   int child_tid = process_execute(cmd_line);
 
+  // need check for TID_ERROR?
+
   struct tid_elem *curr;
   struct list_elem *curr_elem = list_begin(&thread_current()->child_tid_list);
   bool match = false;
