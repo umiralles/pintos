@@ -15,11 +15,19 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static void push_four_bytes_to_stack(struct intr_frame *if_, int32_t val);
+
+struct argument {
+  char *arg;                 /* Tokenised argument from the command line */
+  struct list_elem arg_elem; /* Places argument in global list of arguments */
+};
+
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -30,18 +38,20 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
-
+  
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
+  if(fn_copy == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
-
+  strlcpy(fn_copy, file_name, PGSIZE);
+  
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+  tid = thread_create(file_name, PRI_DEFAULT, start_process, fn_copy);
+
+  if(tid == TID_ERROR) {
+    palloc_free_page(fn_copy);
+  }
   return tid;
 }
 
@@ -54,18 +64,98 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
+  char *save_ptr;
+  char *arg_page, *next_arg_location; 
+  struct list arg_list;
+  
+  list_init(&arg_list);
+
+  /* Create a page to keep track of the tokenised arguments. */
+  arg_page = palloc_get_page (0);
+  if(arg_page == NULL)
+    thread_exit();
+
+  char *token;
+  next_arg_location = arg_page;
+
+  struct argument *current_arg;
+  
+  for(token = strtok_r (file_name, " ", &save_ptr); token != NULL;
+      token = strtok_r (NULL, " ", &save_ptr)) {
+    current_arg = (struct argument*) next_arg_location;
+    
+    next_arg_location += sizeof(struct argument);
+    
+    current_arg->arg = next_arg_location;    
+    strlcpy(current_arg->arg, token, PGSIZE);
+    
+    list_push_back(&arg_list, &current_arg->arg_elem);
+    
+    next_arg_location += strlen(token) + 1;
+    if(next_arg_location - arg_page > PGSIZE) {
+      thread_exit();
+    }
+  }
+
+  char *arg1 = list_entry(list_begin(&arg_list), struct argument,
+				      arg_elem)->arg;
+
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
-
+  success = load (arg1, &if_.eip, &if_.esp);
+  
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
+  
+  if (!success) {
     thread_exit ();
+    palloc_free_page(arg_page);
+  }
 
+  struct argument *argument;
+  struct list_elem *e;
+  int32_t argc = 0;
+  
+  /* Push arguments onto stack.
+     Store location of arguments on stack in the arg_list.
+     Calculates number of arguments */
+  for(e = list_rbegin(&arg_list);
+      e != list_rend(&arg_list); e = list_prev(e)) {
+    argument = list_entry(e, struct argument, arg_elem);
+    if_.esp -= strlen(argument->arg) + 1;
+    strlcpy(if_.esp, argument->arg, PGSIZE);
+    
+    argument->arg = (char*) if_.esp;
+    argc++;
+  }
+
+  /* Word align to keep stack aligned on size of char* */
+  if_.esp -= ((int) if_.esp % sizeof(char*));
+
+
+  /* Push a null pointer sentinel onto stack */
+  push_four_bytes_to_stack(&if_, 0);
+
+  /* Push pointers to each argument onto stack */
+  for(e = list_rbegin(&arg_list);
+      e != list_rend(&arg_list); e = list_prev(e)) {
+    argument = list_entry(e, struct argument, arg_elem);
+    
+    push_four_bytes_to_stack(&if_, (int32_t) argument->arg);
+  }
+
+  /* Push argv, argc and false return address onto stack */
+  push_four_bytes_to_stack(&if_, (int32_t) if_.esp);
+  push_four_bytes_to_stack(&if_, argc);
+  //int32_t *dummy_esp = if_.esp;
+  //*dummy_esp = 0;
+  push_four_bytes_to_stack(&if_, (int32_t) 0);
+
+  palloc_free_page(arg_page);
+  
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -75,6 +165,15 @@ start_process (void *file_name_)
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
+
+/* Used for argument parsing 
+   Adds a four byte item onto the stack and updates the stack */
+static void push_four_bytes_to_stack(struct intr_frame *if_, int32_t val) {
+  if_->esp -= sizeof(char*);
+  int32_t *stack_ptr = if_->esp;
+  *stack_ptr = val;
+}
+
 
 /* Waits for thread TID to die and returns its exit status. 
  * If it was terminated by the kernel (i.e. killed due to an exception), 
@@ -448,7 +547,7 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE - 12;
+        *esp = PHYS_BASE;
       else
         palloc_free_page (kpage);
     }
