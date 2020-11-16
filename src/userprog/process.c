@@ -225,6 +225,15 @@ process_exit (void)
   pd = t->pagedir;
   if (pd != NULL) 
     {
+      /* To be added when merged with processWaitImplementation*/
+      /*
+      int MAX_INT_LEN = 10;
+      int max_len = strlen(": exit()\n") + strlen(cur->name) + MAX_INT_LEN;
+      char buffer[max_len];
+      int length = snprintf(buffer, "%s: exit(%d)\n", cur->name,
+      		    cur->tid_elem->exit_status);
+      write(STDOUT_FILENO, buffer, length);
+      /*
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
          so that a timer interrupt can't switch back to the
