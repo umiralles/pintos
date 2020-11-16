@@ -8,6 +8,7 @@
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -197,12 +198,31 @@ process_wait (tid_t child_tid UNUSED)
 void
 process_exit (void)
 {
-  struct thread *cur = thread_current ();
+  struct thread *t = thread_current ();
   uint32_t *pd;
+
+  /* Frees all memory associated with open files */
+  struct list_elem *current;
+  struct file_elem *current_file;
+  
+  while (!list_empty(&t->files)) {
+    current = list_pop_front(&t->files);
+    current_file = list_entry(current, struct file_elem, elem);
+    free(current_file);
+  }
+
+  /* Releases all locks held by the current thread aquired in kernel code */
+  struct list_elem *e;
+  for(e = list_begin(&t->held_locks);
+      e != list_end(&t->held_locks);
+      e = list_next(e)) {
+    struct lock_elem *elem = list_entry(e, struct lock_elem, elem);
+    lock_release(elem->lock);
+  }
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
-  pd = cur->pagedir;
+  pd = t->pagedir;
   if (pd != NULL) 
     {
       /* Correct ordering here is crucial.  We must set
@@ -212,7 +232,7 @@ process_exit (void)
          directory before destroying the process's page
          directory, or our active page directory will be one
          that's been freed (and cleared). */
-      cur->pagedir = NULL;
+      t->pagedir = NULL;
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }

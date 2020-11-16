@@ -112,6 +112,7 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
     struct list held_locks;		/* List of locks held by thread */
     struct list files;			/* List of file descriptors */
+    int next_available_fd;              /* next available file descriptor */
 #endif
 
     /* Owned by thread.c. */
