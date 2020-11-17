@@ -201,9 +201,9 @@ process_wait (tid_t child_tid)
   struct thread *t = thread_current();
 
   // Can probably be deleted
-  if (t->kernel_mode) {
-    return -1;
-  }
+  //if (t->kernel_mode) {
+  //  return -1;
+  //}
   
   struct list_elem *curr = list_begin(&t->child_tid_list);
   struct tid_elem *curr_elem;
@@ -224,7 +224,10 @@ process_wait (tid_t child_tid)
     }
 
     int exit_status = curr_elem->exit_status;
-    list_remove(curr);
+    // since we are waiting for child to terminate it will destroy its
+    // curr field and we down have to remove it here
+    // causes page fault
+    //list_remove(curr);
     free(curr_elem);
     return exit_status;
     
