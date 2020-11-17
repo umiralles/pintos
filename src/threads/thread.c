@@ -247,6 +247,7 @@ thread_create (const char *name, int priority,
   t->tid_elem = malloc(sizeof(struct tid_elem));
   t->tid_elem->tid = tid;
   t->tid_elem->exit_status = -1;
+  t->tid_elem->has_faulted = false;
   sema_init(&t->tid_elem->child_semaphore, 0);
   lock_init(&t->tid_elem->tid_elem_lock);
   list_push_back(&thread_current()->child_tid_list, &t->tid_elem->elem);

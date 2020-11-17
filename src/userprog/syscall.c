@@ -80,7 +80,10 @@ static void syscall_exec(struct intr_frame *f) {
 
   int child_tid = process_execute(cmd_line);
 
-  // need check for TID_ERROR?
+  if(child_tid == TID_ERROR) {
+    return_value_to_frame(f, (uint32_t) -1);    
+    return;
+  }
 
   struct tid_elem *curr;
   struct list_elem *curr_elem = list_begin(&thread_current()->child_tid_list);
@@ -96,9 +99,12 @@ static void syscall_exec(struct intr_frame *f) {
   }
 
   if (!match) {
-    // some error that exits the program?
+    child_tid = -1;
   } else {
     sema_down(&curr->child_semaphore);
+    if(curr->has_faulted) {
+      child_tid = -1;
+    }
   }
   
   return_value_to_frame(f, (uint32_t) child_tid);

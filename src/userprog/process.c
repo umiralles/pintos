@@ -19,7 +19,6 @@
 #include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
-#include "threads/malloc.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -75,6 +74,7 @@ start_process (void *file_name_)
   /* Create a page to keep track of the tokenised arguments. */
   arg_page = palloc_get_page (0);
   if(arg_page == NULL) {
+    thread_current()->tid_elem->has_faulted = true;
     /* Sema up to let parent continue at failure */
     sema_up(&thread_current()->tid_elem->child_semaphore);
     thread_exit();
@@ -98,6 +98,7 @@ start_process (void *file_name_)
     
     next_arg_location += strlen(token) + 1;
     if(next_arg_location - arg_page > PGSIZE) {
+      thread_current()->tid_elem->has_faulted = true;
       /* Sema up to let parent continue at failure */
       sema_up(&thread_current()->tid_elem->child_semaphore);
       thread_exit();
@@ -118,6 +119,9 @@ start_process (void *file_name_)
   palloc_free_page (file_name);
   
   if (!success) {
+    thread_current()->tid_elem->has_faulted = true;
+    /* Sema up to let parent continue at failure */
+    sema_up(&thread_current()->tid_elem->child_semaphore);
     thread_exit ();
     palloc_free_page(arg_page);
   }

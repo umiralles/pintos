@@ -38,6 +38,7 @@ struct tid_elem {
   struct list_elem elem;              /* Element to store in a list */
   bool process_dead;		      /* True if one of the processes
 					 terminated */
+  bool has_faulted;		      /* True when process exits erroneously */
 };
 
 /* A kernel thread or user process.
