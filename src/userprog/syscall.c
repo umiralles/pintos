@@ -9,6 +9,7 @@
 #include "userprog/pagedir.h"
 #include "userprog/syscall.h"
 #include "devices/shutdown.h"
+#include "devices/input.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -21,11 +22,11 @@ static void syscall_create(struct intr_frame *f);
 static void syscall_remove(struct intr_frame *f);
 static void syscall_open(struct intr_frame *f);
 static void syscall_filesize(struct intr_frame *f);
-static void syscall_read(struct intr_frame *f UNUSED) {}
+static void syscall_read(struct intr_frame *f);
 static void syscall_write(struct intr_frame *f);
 static void syscall_seek(struct intr_frame *f);
 static void syscall_tell(struct intr_frame *f);
-static void syscall_close(struct intr_frame *f UNUSED) {}
+static void syscall_close(struct intr_frame *f);
 
 /* MEMORY ACCESS FUNCTION */
 static void syscall_access_memory(const void *vaddr);
@@ -123,8 +124,7 @@ static void syscall_open(struct intr_frame *f) {
 }
 
 /* Returns either the size of a file in bytes 
-   or -1 if the file cannot be accessed
- */
+   or -1 if the file cannot be accessed */
 static void syscall_filesize(struct intr_frame *f) {
   int fd = GET_ARGUMENT_VALUE(f, int, 1);
   int filesize = -1;
@@ -140,6 +140,40 @@ static void syscall_filesize(struct intr_frame *f) {
   }
   
   return_value_to_frame(f, (uint32_t) filesize);
+}
+
+static void syscall_read(struct intr_frame *f) {
+  int fd = GET_ARGUMENT_VALUE(f, int, 1);
+  uint8_t *buffer = (uint8_t *) GET_ARGUMENT_VALUE(f, void *, 2);
+  unsigned size = GET_ARGUMENT_VALUE(f, unsigned, 3);
+  struct thread *t = thread_current();
+  
+  int bytes_read = -1;
+
+  /* Check for safe user memory access */
+  syscall_access_memory(buffer);
+  syscall_access_memory(buffer + size);
+  
+  if(fd == STDIN_FILENO) {
+    uint8_t key;
+    bytes_read = 0;
+    for(unsigned i = 0; i < size; i++) {
+      key = input_getc();
+      *buffer = key;
+      
+      buffer++;
+      bytes_read++;
+    }
+  } else {
+    struct file_elem *file = get_file(t, fd);
+    if(file != NULL) {
+      syscall_acquire_lock(&filesys_lock);
+      bytes_read = (int) file_read(file->file, buffer, (off_t) size);
+      syscall_release_lock(&filesys_lock);
+    }
+  }
+
+  return_value_to_frame(f, (uint32_t) bytes_read);
 }
 
 static void syscall_write(struct intr_frame *f) {
@@ -199,6 +233,24 @@ static void syscall_tell(struct intr_frame *f) {
   }
   
   return_value_to_frame(f, (uint32_t) position);
+}
+
+static void syscall_close(struct intr_frame *f) {
+  int fd = GET_ARGUMENT_VALUE(f, int, 1);
+  struct thread *t = thread_current();
+
+  struct file_elem *file = get_file(t, fd);
+
+  if(file != NULL) {
+    syscall_acquire_lock(&filesys_lock);
+    file_close(file->file);
+    syscall_release_lock(&filesys_lock);
+    
+    /* Remove file_elem struct from list of files and
+       free allocated memory */
+    list_remove(&file->elem);
+    free(file);
+  }
 }
 
 /* MEMORY ACCESS FUNCTION */
@@ -263,6 +315,5 @@ static struct file_elem* get_file(struct thread *t, int fd) {
   }
 
   /* Nothing found */
-  return NULL;
-  
+  return NULL; 
 }
