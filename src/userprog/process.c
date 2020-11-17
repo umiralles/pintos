@@ -272,8 +272,9 @@ process_exit (void)
       printf("%s: exit(%d)\n", t->name, t->tid_elem->exit_status);
 
       struct list_elem *child_elem = list_begin(&t->child_tid_list);
+      struct tid_elem *child;
       while(child_elem != list_end(&t->child_tid_list)) {
-	struct tid_elem *child = list_entry(child_elem, struct tid_elem, elem);	
+	child = list_entry(child_elem, struct tid_elem, elem);	
 	lock_acquire(&child->tid_elem_lock);
 	if(child->process_dead) {
 	  lock_release(&child->tid_elem_lock);	
