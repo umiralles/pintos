@@ -244,15 +244,6 @@ process_exit (void)
     free(current_file);
   }
 
-  /* Releases all locks held by the current thread aquired in kernel code */
-  struct list_elem *e;
-  for(e = list_begin(&t->held_locks);
-      e != list_end(&t->held_locks);
-      e = list_next(e)) {
-    struct lock_elem *elem = list_entry(e, struct lock_elem, elem);
-    lock_release(elem->lock);
-  }
-
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = t->pagedir;
@@ -285,6 +276,11 @@ process_exit (void)
 	}
 	child_elem = list_next(child_elem);
       }
+      
+      /* Create local tid_elem to be able to reference it after
+         pagedir_destroy. */
+      struct tid_elem *tid_elem = thread_current()->tid_elem;
+      
 
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
@@ -296,6 +292,20 @@ process_exit (void)
       t->pagedir = NULL;
       pagedir_activate (NULL);
       pagedir_destroy (pd);
+      
+      /* If parent process is dead then free shared tid_elem
+         otherwise sema_up for if the parent process is waiting.
+	 Need to do it at the end of process_exit to ensure
+	 parent process wakes up at the correct point. */
+      lock_acquire(&tid_elem->tid_elem_lock);
+      if(tid_elem->process_dead) {
+        lock_release(&tid_elem->tid_elem_lock);
+        free(tid_elem);
+      } else {
+        tid_elem->process_dead = true;
+        sema_up(&tid_elem->child_semaphore);
+        lock_release(&tid_elem->tid_elem_lock);
+      }
     }
 }
 
