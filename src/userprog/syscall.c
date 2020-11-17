@@ -86,7 +86,6 @@ static void syscall_exit(struct intr_frame *f) {
   process_exit();
 }
 
-// something to do with kernel_mode?
 static void syscall_exec(struct intr_frame *f) {
   const char *cmd_line = GET_ARGUMENT_VALUE(f, char *, 1);
 

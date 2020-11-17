@@ -122,7 +122,6 @@ struct thread
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
-    bool kernel_mode;
     uint32_t *pagedir;                  /* Page directory. */
     struct list held_locks;		/* List of locks held by thread */
     struct list files;			/* List of file descriptors */

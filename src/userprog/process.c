@@ -62,9 +62,6 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
-  /* Sets the kernel_mode to false to imply a user process */
-  thread_current()->kernel_mode = false;
-
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
@@ -199,12 +196,6 @@ int
 process_wait (tid_t child_tid) 
 {
   struct thread *t = thread_current();
-
-  // Can probably be deleted
-  //if (t->kernel_mode) {
-  //  return -1;
-  //}
-  
   struct list_elem *curr = list_begin(&t->child_tid_list);
   struct tid_elem *curr_elem;
   bool match = false;
@@ -213,7 +204,7 @@ process_wait (tid_t child_tid)
 
     if (curr_elem->tid == child_tid) {
       match = true;
-    }
+   }
     
     curr = list_next(curr);
   }
@@ -227,7 +218,7 @@ process_wait (tid_t child_tid)
     // since we are waiting for child to terminate it will destroy its
     // curr field and we down have to remove it here
     // causes page fault
-    //list_remove(curr);
+    list_remove(&curr_elem->elem);
     free(curr_elem);
     return exit_status;
     

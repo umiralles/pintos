@@ -116,11 +116,6 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
   initial_thread->nice = 0;                 /* Initially 0 niceness */
   initial_thread->recent_cpu = 0;           /* Initially 0 CPU useage */
-
-  #ifdef USERPROG
-  initial_thread->kernel_mode = true;
-  #endif
-  
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -249,7 +244,6 @@ thread_create (const char *name, int priority,
 
   /* Initialise thread for userprog system */
 #ifdef USERPROG
-  t->kernel_mode = thread_current()->kernel_mode;
   t->tid_elem = malloc(sizeof(struct tid_elem));
   t->tid_elem->tid = tid;
   t->tid_elem->exit_status = -1;
