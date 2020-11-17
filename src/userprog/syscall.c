@@ -279,14 +279,23 @@ static void return_value_to_frame(struct intr_frame *f, uint32_t val) {
 static void syscall_acquire_lock(struct lock *lock) {
   // acquire the lock and add it to a list
   lock_acquire(lock);
-  struct lock_elem lock_elem;
-  lock_elem.lock = lock;
-  list_push_back(&thread_current()->held_locks, &lock_elem.elem);
+  struct lock_elem *lock_elem = malloc(sizeof(struct lock_elem));
+  lock_elem->lock = lock;
+  list_push_back(&thread_current()->held_locks, &lock_elem->elem);
 }
 
 //TODO: make this edit the list of thread's held locks
 static void syscall_release_lock(struct lock *lock) {
+  struct list_elem *e = list_head (&thread_current()->held_locks);
+  struct lock_elem *curr_lock = list_entry(e, struct lock_elem, elem);
+
+  while(curr_lock->lock == lock &&
+	(e = list_next (e)) != list_end (&thread_current()->held_locks)) {
+    curr_lock = list_entry(e, struct lock_elem, elem);
+  }
+  list_remove(&curr_lock->elem);
   lock_release(lock);
+  free(curr_lock);
 }
 
 /* Takes in a thread and a file descriptor
@@ -309,7 +318,7 @@ static struct file_elem* get_file(struct thread *t, int fd) {
   /* Attempt to find a matching fd in the thread's files list */
   for(e = list_begin(&t->files); e != list_end(&t->files); e = list_next(e)) {
     current = list_entry(e, struct file_elem, elem);
-    if (current->fd == fd) {
+    if(current->fd == fd) {
       return current;
     }
   }
