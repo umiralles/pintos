@@ -19,7 +19,6 @@
 #include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
-#include "threads/malloc.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -51,9 +50,32 @@ process_execute (const char *file_name)
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create(file_name, PRI_DEFAULT, start_process, fn_copy);
 
+  struct tid_elem *curr;
+  struct list_elem *curr_elem = list_begin(&thread_current()->child_tid_list);
+  bool match = false;
+  while (curr_elem != list_end(&thread_current()->child_tid_list) && !match) {
+    curr = list_entry(curr_elem, struct tid_elem, elem);
+    
+    if (curr->tid == tid) {
+      match = true;
+    }
+
+    curr_elem = list_next(curr_elem);
+  }
+
+  if (!match) {
+    tid = TID_ERROR;
+  } else {
+    sema_down(&curr->child_semaphore);
+    if(curr->has_faulted) {
+      tid = TID_ERROR;
+    }
+  }
+
   if(tid == TID_ERROR) {
     palloc_free_page(fn_copy);
   }
+  
   return tid;
 }
 
@@ -62,9 +84,6 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
-  /* Sets the kernel_mode to false to imply a user process */
-  thread_current()->kernel_mode = false;
-
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
@@ -78,6 +97,7 @@ start_process (void *file_name_)
   /* Create a page to keep track of the tokenised arguments. */
   arg_page = palloc_get_page (0);
   if(arg_page == NULL) {
+    thread_current()->tid_elem->has_faulted = true;
     /* Sema up to let parent continue at failure */
     sema_up(&thread_current()->tid_elem->child_semaphore);
     thread_exit();
@@ -101,6 +121,7 @@ start_process (void *file_name_)
     
     next_arg_location += strlen(token) + 1;
     if(next_arg_location - arg_page > PGSIZE) {
+      thread_current()->tid_elem->has_faulted = true;
       /* Sema up to let parent continue at failure */
       sema_up(&thread_current()->tid_elem->child_semaphore);
       thread_exit();
@@ -121,8 +142,11 @@ start_process (void *file_name_)
   palloc_free_page (file_name);
   
   if (!success) {
-    thread_exit ();
+    thread_current()->tid_elem->has_faulted = true;
+    /* Sema up to let parent continue at failure */
+    sema_up(&thread_current()->tid_elem->child_semaphore);
     palloc_free_page(arg_page);
+    thread_exit ();
   }
 
   struct argument *argument;
@@ -200,11 +224,6 @@ process_wait (tid_t child_tid)
 {
   struct thread *t = thread_current();
 
-  // Can probably be deleted
-  if (t->kernel_mode) {
-    return -1;
-  }
-  
   struct list_elem *curr = list_begin(&t->child_tid_list);
   struct tid_elem *curr_elem;
   bool match = false;
@@ -213,7 +232,7 @@ process_wait (tid_t child_tid)
 
     if (curr_elem->tid == child_tid) {
       match = true;
-    }
+   }
     
     curr = list_next(curr);
   }
@@ -223,8 +242,13 @@ process_wait (tid_t child_tid)
       sema_down(&curr_elem->child_semaphore);
     }
 
+    if (!curr_elem->process_dead) {
+      return -1;
+    }
+
     int exit_status = curr_elem->exit_status;
-    list_remove(curr);
+    list_remove(&curr_elem->elem);
+    
     free(curr_elem);
     return exit_status;
     
@@ -250,15 +274,6 @@ process_exit (void)
     free(current_file);
   }
 
-  /* Releases all locks held by the current thread aquired in kernel code */
-  struct list_elem *e;
-  for(e = list_begin(&t->held_locks);
-      e != list_end(&t->held_locks);
-      e = list_next(e)) {
-    struct lock_elem *elem = list_entry(e, struct lock_elem, elem);
-    lock_release(elem->lock);
-  }
-
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = t->pagedir;
@@ -275,20 +290,43 @@ process_exit (void)
       write(STDOUT_FILENO, buffer, length);
       */
 
-      printf("%s: exit(%d)\n", t->name, t->tid_elem->exit_status);
+      char *name = t->name;
+      char* token = strtok_r(name, " ", &name);
+      printf("%s: exit(%d)\n", token, t->tid_elem->exit_status);
 
+      /* Free children's tid_elem if the child has terminated. */
       struct list_elem *child_elem = list_begin(&t->child_tid_list);
+      struct tid_elem *child_tid_elem;
+      
       while(child_elem != list_end(&t->child_tid_list)) {
-	struct tid_elem *child = list_entry(child_elem, struct tid_elem, elem);	
-	lock_acquire(&child->tid_elem_lock);
-	if(child->process_dead) {
-	  lock_release(&child->tid_elem_lock);	
-	  free(child);
+	child_tid_elem = list_entry(child_elem, struct tid_elem, elem);	
+	lock_acquire(&child_tid_elem->tid_elem_lock);
+	
+	if(child_tid_elem->process_dead) {
+	  lock_release(&child_tid_elem->tid_elem_lock);
+	  child_elem = list_next(child_elem);
+	  free(child_tid_elem);
+	  
 	} else {
-   	  child->process_dead = true;
-	  lock_release(&child->tid_elem_lock);
+   	  child_tid_elem->process_dead = true;
+	  child_elem = list_next(child_elem);
+	  lock_release(&child_tid_elem->tid_elem_lock);
 	}
-	child_elem = list_next(child_elem);
+      }
+      
+      /* If parent process is dead then free shared tid_elem
+         otherwise sema_up for if the parent process is waiting.
+	 Need to do it at the end of process_exit to ensure
+	 parent process wakes up at the correct point. */
+      lock_acquire(&t->tid_elem->tid_elem_lock);
+      if(t->tid_elem->process_dead) {
+        lock_release(&t->tid_elem->tid_elem_lock);
+        free(&t->tid_elem);
+	
+      } else {
+        t->tid_elem->process_dead = true;
+	sema_up(&t->tid_elem->child_semaphore);
+	lock_release(&t->tid_elem->tid_elem_lock);
       }
 
       /* Correct ordering here is crucial.  We must set
@@ -301,7 +339,7 @@ process_exit (void)
       t->pagedir = NULL;
       pagedir_activate (NULL);
       pagedir_destroy (pd);
-    }
+     }
 }
 
 /* Sets up the CPU for running user code in the current

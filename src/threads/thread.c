@@ -116,11 +116,6 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
   initial_thread->nice = 0;                 /* Initially 0 niceness */
   initial_thread->recent_cpu = 0;           /* Initially 0 CPU useage */
-
-  #ifdef USERPROG
-  initial_thread->kernel_mode = true;
-  #endif
-  
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -249,11 +244,12 @@ thread_create (const char *name, int priority,
 
   /* Initialise thread for userprog system */
 #ifdef USERPROG
-  t->kernel_mode = thread_current()->kernel_mode;
   t->tid_elem = malloc(sizeof(struct tid_elem));
   t->tid_elem->tid = tid;
   t->tid_elem->exit_status = -1;
-  sema_init(&t->tid_elem->child_semaphore, 1);
+  t->tid_elem->process_dead = false;
+  t->tid_elem->has_faulted = false;
+  sema_init(&t->tid_elem->child_semaphore, 0);
   lock_init(&t->tid_elem->tid_elem_lock);
   list_push_back(&thread_current()->child_tid_list, &t->tid_elem->elem);
 #endif
@@ -263,7 +259,7 @@ thread_create (const char *name, int priority,
     t->nice = thread_current()->nice;
     t->recent_cpu = thread_current()->recent_cpu;
     t->priority = calc_mlfqs_priority(t);
-    t->effective_priority = t->priority; 
+    t->effective_priority = t->priority;
   }
   
   /* Prepare thread for first run by initializing its stack.
@@ -633,7 +629,6 @@ init_thread (struct thread *t, const char *name, int priority)
   sema_init(&t->donations_sema, 1);
 
 #ifdef USERPROG
-  list_init(&t->held_locks);
   list_init(&t->files);
   t->next_available_fd = STDOUT_FILENO + 1;
   list_init(&t->child_tid_list);

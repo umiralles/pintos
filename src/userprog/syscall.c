@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <syscall-nr.h>
 #include "threads/thread.h"
+#include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
 #include "filesys/off_t.h"
@@ -19,7 +20,7 @@ static void syscall_handler (struct intr_frame *);
 static void syscall_halt(struct intr_frame *f UNUSED);
 static void syscall_exit(struct intr_frame *f);
 static void syscall_exec(struct intr_frame *f);
-static void syscall_wait(struct intr_frame *f UNUSED) {}
+static void syscall_wait(struct intr_frame *f);
 static void syscall_create(struct intr_frame *f);
 static void syscall_remove(struct intr_frame *f);
 static void syscall_open(struct intr_frame *f);
@@ -70,52 +71,33 @@ static void syscall_halt(struct intr_frame *f UNUSED) {
 static void syscall_exit(struct intr_frame *f) {
   int status = GET_ARGUMENT_VALUE(f, int, 1);
 
- /* Ups the semaphore and exit_status in its tid_elem
-     for if its parent calls process_wait on it */
-  lock_acquire(&thread_current()->tid_elem->tid_elem_lock);
-  struct tid_elem *tid_elem = thread_current()->tid_elem;
-  if(tid_elem->process_dead) {
-    lock_release(&thread_current()->tid_elem->tid_elem_lock);
-    free(tid_elem);
-  } else {
-    tid_elem->exit_status = status;
-    tid_elem->process_dead = true;
-    sema_up(&tid_elem->child_semaphore);
-    lock_release(&thread_current()->tid_elem->tid_elem_lock);
-  }
+ /* Puts exit_status in its tid_elem for if its
+    parent calls process_wait on it */
+  thread_current()->tid_elem->exit_status = status;
 
   return_value_to_frame(f, (uint32_t) status);
   process_exit();
 }
 
-// something to do with kernel_mode?
 static void syscall_exec(struct intr_frame *f) {
   const char *cmd_line = GET_ARGUMENT_VALUE(f, char *, 1);
 
+  syscall_access_string(cmd_line);
+
   int child_tid = process_execute(cmd_line);
 
-  // need check for TID_ERROR?
-
-  struct tid_elem *curr;
-  struct list_elem *curr_elem = list_begin(&thread_current()->child_tid_list);
-  bool match = false;
-  while (curr_elem != list_end(&thread_current()->child_tid_list) && !match) {
-    curr = list_entry(curr_elem, struct tid_elem, elem);
-    
-    if (curr->tid == child_tid) {
-      match = true;
-    }
-
-    curr_elem = list_next(curr_elem);
-  }
-
-  if (!match) {
-    // some error that exits the program?
-  } else {
-    sema_down(&curr->child_semaphore);
+  if(child_tid == TID_ERROR) {
+    return_value_to_frame(f, (uint32_t) -1);    
+    return;
   }
   
   return_value_to_frame(f, (uint32_t) child_tid);
+}
+
+static void syscall_wait(struct intr_frame *f) {
+  tid_t tid = GET_ARGUMENT_VALUE(f, tid_t, 1);
+  int res = process_wait(tid);
+  return_value_to_frame(f, (uint32_t) res);
 }
 
 static void syscall_create(struct intr_frame *f) {
@@ -311,6 +293,7 @@ static void syscall_close(struct intr_frame *f) {
 }
 
 /* MEMORY ACCESS FUNCTION */
+/* Release any acquired locks before calling syscall_access_memory. */
 
 /* Checks validity of any user supplied pointer
    A valid pointer is one that is in user space and on an allocated page
