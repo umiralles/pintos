@@ -6,10 +6,12 @@
 #include "filesys/off_t.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/directory.h"
 #include "userprog/pagedir.h"
 #include "userprog/process.h"
 #include "userprog/syscall.h"
 #include "devices/shutdown.h"
+#include "devices/input.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -22,20 +24,20 @@ static void syscall_create(struct intr_frame *f);
 static void syscall_remove(struct intr_frame *f);
 static void syscall_open(struct intr_frame *f);
 static void syscall_filesize(struct intr_frame *f);
-static void syscall_read(struct intr_frame *f UNUSED) {}
+static void syscall_read(struct intr_frame *f);
 static void syscall_write(struct intr_frame *f);
 static void syscall_seek(struct intr_frame *f);
 static void syscall_tell(struct intr_frame *f);
-static void syscall_close(struct intr_frame *f UNUSED) {}
+static void syscall_close(struct intr_frame *f);
 
 /* MEMORY ACCESS FUNCTION */
 static void syscall_access_memory(const void *vaddr);
+static void syscall_access_filename(const char *name);
+static void syscall_access_string(const char *str);
 
 /* HELPER FUNCTIONS */
 static void *get_argument(void *esp, int arg_no);
 static void return_value_to_frame(struct intr_frame *f, uint32_t val);
-static void syscall_acquire_lock(struct lock *);
-static void syscall_release_lock(struct lock *);
 static struct file_elem* get_file(struct thread *t, int fd);
 
 /* Jump table used to call a syscall */
@@ -117,22 +119,26 @@ static void syscall_exec(struct intr_frame *f) {
 }
 
 static void syscall_create(struct intr_frame *f) {
-  const char *file = GET_ARGUMENT_VALUE(f, char *, 1);
+  const char *name = GET_ARGUMENT_VALUE(f, char *, 1);
   uint32_t initial_size = GET_ARGUMENT_VALUE(f, uint32_t, 2);
 
-  syscall_acquire_lock(&filesys_lock);
-  bool res = filesys_create(file, (off_t) initial_size); 
-  syscall_release_lock(&filesys_lock);
+  syscall_access_filename(name);
+  
+  lock_acquire(&filesys_lock);
+  bool res = filesys_create(name, (off_t) initial_size); 
+  lock_release(&filesys_lock);
   
   return_value_to_frame(f, (uint32_t) res);
 }
 
 static void syscall_remove(struct intr_frame *f) {
-  const char *file = GET_ARGUMENT_VALUE(f, char *, 1);
+  const char *name = GET_ARGUMENT_VALUE(f, char *, 1);
 
-  syscall_acquire_lock(&filesys_lock);
-  bool res = filesys_remove(file);
-  syscall_release_lock(&filesys_lock);
+  syscall_access_filename(name);
+  
+  lock_acquire(&filesys_lock);
+  bool res = filesys_remove(name);
+  lock_release(&filesys_lock);
 
   return_value_to_frame(f, (uint32_t) res);
 }
@@ -141,7 +147,9 @@ static void syscall_open(struct intr_frame *f) {
   const char *name = GET_ARGUMENT_VALUE(f, char *, 1);
   int fd = -1;
 
-  syscall_acquire_lock(&filesys_lock);
+  syscall_access_filename(name);
+
+  lock_acquire(&filesys_lock);
   struct file *file = filesys_open(name);
 
   if(file != NULL) {
@@ -151,6 +159,7 @@ static void syscall_open(struct intr_frame *f) {
 
     /* If process runs out of memory, kill it */
     if(current_file == NULL) {
+      lock_release(&filesys_lock);
       thread_exit();
     }
     
@@ -163,14 +172,13 @@ static void syscall_open(struct intr_frame *f) {
     list_push_back(&t->files, &current_file->elem);
   }
 
-  syscall_release_lock(&filesys_lock);
+  lock_release(&filesys_lock);
 
   return_value_to_frame(f, (uint32_t) fd);  
 }
 
 /* Returns either the size of a file in bytes 
-   or -1 if the file cannot be accessed
- */
+   or -1 if the file cannot be accessed */
 static void syscall_filesize(struct intr_frame *f) {
   int fd = GET_ARGUMENT_VALUE(f, int, 1);
   int filesize = -1;
@@ -180,37 +188,74 @@ static void syscall_filesize(struct intr_frame *f) {
 
   /* If a file is found, get its size */
   if(file != NULL) {
-    syscall_acquire_lock(&filesys_lock);
+    lock_acquire(&filesys_lock);
     filesize = file_length(file->file);
-    syscall_release_lock(&filesys_lock);
+    lock_release(&filesys_lock);
   }
   
   return_value_to_frame(f, (uint32_t) filesize);
+}
+
+static void syscall_read(struct intr_frame *f) {
+  int fd = GET_ARGUMENT_VALUE(f, int, 1);
+  uint8_t *buffer = (uint8_t *) GET_ARGUMENT_VALUE(f, void *, 2);
+  unsigned size = GET_ARGUMENT_VALUE(f, unsigned, 3);
+  struct thread *t = thread_current();
+  
+  int bytes_read = -1;
+
+  /* Check entire buffer is in valid memory */
+  syscall_access_memory(buffer);
+  syscall_access_memory(buffer + size);
+  
+  if(fd == STDIN_FILENO) {
+    uint8_t key;
+    bytes_read = 0;
+    for(unsigned i = 0; i < size; i++) {
+      key = input_getc();
+      *buffer = key;
+      
+      buffer++;
+      bytes_read++;
+    }
+  } else {
+    struct file_elem *file = get_file(t, fd);
+    if(file != NULL) {
+      lock_acquire(&filesys_lock);
+      bytes_read = (int) file_read(file->file, buffer, (off_t) size);
+      lock_release(&filesys_lock);
+    }
+  }
+
+  return_value_to_frame(f, (uint32_t) bytes_read);
 }
 
 static void syscall_write(struct intr_frame *f) {
   int fd = GET_ARGUMENT_VALUE(f, int, 1);
   const void *buffer = GET_ARGUMENT_VALUE(f, void *, 2);
   unsigned size = GET_ARGUMENT_VALUE(f, unsigned, 3);
-  off_t bytes_written;
+  int bytes_written = -1;
+
+  struct thread *t = thread_current();
+
+  /* Checks entire buffer is in valid memory */
+  syscall_access_memory(buffer);
+  syscall_access_memory(buffer + size);
   
   if(fd == STDOUT_FILENO) {
     putbuf(buffer, size);
     bytes_written = (off_t) size;
   } else {
-    struct list_elem *e = list_begin(&thread_current()->files);	  
-    struct file_elem *file_elem = list_entry(e, struct file_elem, elem);
-    
-    while(file_elem->fd != fd) {
-      e = list_next(e);
-      file_elem = list_entry(e, struct file_elem, elem);
+    struct file_elem *file = get_file(t, fd);
+
+    if (file != NULL) {
+      lock_acquire(&filesys_lock);
+      bytes_written = file_write(file->file, buffer, (off_t) size);
+      lock_release(&filesys_lock);
     }
-    
-    syscall_access_memory(file_elem->file); 
-    bytes_written = file_write(file_elem->file, buffer, (off_t) size);
   }
   
-  f->eax = bytes_written;
+  return_value_to_frame(f, (uint32_t) bytes_written);
 }
 
 static void syscall_seek(struct intr_frame *f) {
@@ -223,9 +268,9 @@ static void syscall_seek(struct intr_frame *f) {
 
   /* If a file is found, set its position to the position argument */
   if(file != NULL) {
-    syscall_acquire_lock(&filesys_lock);
+    lock_acquire(&filesys_lock);
     file_seek(file->file, (off_t) position);
-    syscall_release_lock(&filesys_lock);
+    lock_release(&filesys_lock);
   }
 }
 
@@ -239,20 +284,68 @@ static void syscall_tell(struct intr_frame *f) {
 
   /* If a file is found, get next byte to be read */
   if(file != NULL) {
-    syscall_acquire_lock(&filesys_lock);
+    lock_acquire(&filesys_lock);
     position = (unsigned) file_tell(file->file);
-    syscall_release_lock(&filesys_lock);
+    lock_release(&filesys_lock);
   }
   
   return_value_to_frame(f, (uint32_t) position);
 }
 
+static void syscall_close(struct intr_frame *f) {
+  int fd = GET_ARGUMENT_VALUE(f, int, 1);
+  struct thread *t = thread_current();
+
+  struct file_elem *file = get_file(t, fd);
+
+  if(file != NULL) {
+    lock_acquire(&filesys_lock);
+    file_close(file->file);
+    lock_release(&filesys_lock);
+    
+    /* Remove file_elem struct from list of files and
+       free allocated memory */
+    list_remove(&file->elem);
+    free(file);
+  }
+}
+
 /* MEMORY ACCESS FUNCTION */
 
+/* Checks validity of any user supplied pointer
+   A valid pointer is one that is in user space and on an allocated page
+*/
 static void syscall_access_memory(const void *vaddr) {
   struct thread *t = thread_current();
   if(!(is_user_vaddr(vaddr) && pagedir_get_page(t->pagedir, vaddr))) {
     thread_exit();
+  }
+}
+
+/* Checks validity and length of a filename */
+static void syscall_access_filename(const char *name) {
+  const char *curr = name;
+  int i = 0;
+
+  while(*curr != '\0' && i < NAME_MAX) {
+    syscall_access_memory(curr);
+    curr++;
+    i++;
+  }
+
+  /* File name is too long and will break the file system */
+  if(i == NAME_MAX) {
+    thread_exit();
+  }
+}
+
+/* Checks validity of all char addresses in a string */
+static void syscall_access_string(const char *str) {
+  const char *curr = str;
+
+  while(*curr != '\0') {
+    syscall_access_memory(curr);
+    curr++;
   }
 }
 
@@ -265,22 +358,6 @@ static void *get_argument(void *esp, int arg_no) {
 
 static void return_value_to_frame(struct intr_frame *f, uint32_t val) {
   f->eax = val;
-}
-
-/* Needs to be thread-safe!
-   Not sure if this is needed, but we need some way of finding
-   which locks are held by the thread */
-static void syscall_acquire_lock(struct lock *lock) {
-  // acquire the lock and add it to a list
-  lock_acquire(lock);
-  struct lock_elem lock_elem;
-  lock_elem.lock = lock;
-  list_push_back(&thread_current()->held_locks, &lock_elem.elem);
-}
-
-//TODO: make this edit the list of thread's held locks
-static void syscall_release_lock(struct lock *lock) {
-  lock_release(lock);
 }
 
 /* Takes in a thread and a file descriptor
@@ -303,12 +380,11 @@ static struct file_elem* get_file(struct thread *t, int fd) {
   /* Attempt to find a matching fd in the thread's files list */
   for(e = list_begin(&t->files); e != list_end(&t->files); e = list_next(e)) {
     current = list_entry(e, struct file_elem, elem);
-    if (current->fd == fd) {
+    if(current->fd == fd) {
       return current;
     }
   }
 
   /* Nothing found */
-  return NULL;
-  
+  return NULL; 
 }
