@@ -34,8 +34,6 @@ static void syscall_access_memory(const void *vaddr);
 /* HELPER FUNCTIONS */
 static void *get_argument(void *esp, int arg_no);
 static void return_value_to_frame(struct intr_frame *f, uint32_t val);
-static void syscall_acquire_lock(struct lock *);
-static void syscall_release_lock(struct lock *);
 static struct file_elem* get_file(struct thread *t, int fd);
 
 /* Jump table used to call a syscall */
@@ -75,9 +73,9 @@ static void syscall_create(struct intr_frame *f) {
   const char *file = GET_ARGUMENT_VALUE(f, char *, 1);
   uint32_t initial_size = GET_ARGUMENT_VALUE(f, uint32_t, 2);
 
-  syscall_acquire_lock(&filesys_lock);
+  lock_acquire(&filesys_lock);
   bool res = filesys_create(file, (off_t) initial_size); 
-  syscall_release_lock(&filesys_lock);
+  lock_release(&filesys_lock);
   
   return_value_to_frame(f, (uint32_t) res);
 }
@@ -85,9 +83,9 @@ static void syscall_create(struct intr_frame *f) {
 static void syscall_remove(struct intr_frame *f) {
   const char *file = GET_ARGUMENT_VALUE(f, char *, 1);
 
-  syscall_acquire_lock(&filesys_lock);
+  lock_acquire(&filesys_lock);
   bool res = filesys_remove(file);
-  syscall_release_lock(&filesys_lock);
+  lock_release(&filesys_lock);
 
   return_value_to_frame(f, (uint32_t) res);
 }
@@ -96,7 +94,7 @@ static void syscall_open(struct intr_frame *f) {
   const char *name = GET_ARGUMENT_VALUE(f, char *, 1);
   int fd = -1;
 
-  syscall_acquire_lock(&filesys_lock);
+  lock_acquire(&filesys_lock);
   struct file *file = filesys_open(name);
 
   if(file != NULL) {
@@ -106,6 +104,7 @@ static void syscall_open(struct intr_frame *f) {
 
     /* If process runs out of memory, kill it */
     if(current_file == NULL) {
+      lock_release(&filesys_lock);
       thread_exit();
     }
     
@@ -118,7 +117,7 @@ static void syscall_open(struct intr_frame *f) {
     list_push_back(&t->files, &current_file->elem);
   }
 
-  syscall_release_lock(&filesys_lock);
+  lock_release(&filesys_lock);
 
   return_value_to_frame(f, (uint32_t) fd);  
 }
@@ -134,9 +133,9 @@ static void syscall_filesize(struct intr_frame *f) {
 
   /* If a file is found, get its size */
   if(file != NULL) {
-    syscall_acquire_lock(&filesys_lock);
+    lock_acquire(&filesys_lock);
     filesize = file_length(file->file);
-    syscall_release_lock(&filesys_lock);
+    lock_release(&filesys_lock);
   }
   
   return_value_to_frame(f, (uint32_t) filesize);
@@ -167,9 +166,9 @@ static void syscall_read(struct intr_frame *f) {
   } else {
     struct file_elem *file = get_file(t, fd);
     if(file != NULL) {
-      syscall_acquire_lock(&filesys_lock);
+      lock_acquire(&filesys_lock);
       bytes_read = (int) file_read(file->file, buffer, (off_t) size);
-      syscall_release_lock(&filesys_lock);
+      lock_release(&filesys_lock);
     }
   }
 
@@ -211,9 +210,9 @@ static void syscall_seek(struct intr_frame *f) {
 
   /* If a file is found, set its position to the position argument */
   if(file != NULL) {
-    syscall_acquire_lock(&filesys_lock);
+    lock_acquire(&filesys_lock);
     file_seek(file->file, (off_t) position);
-    syscall_release_lock(&filesys_lock);
+    lock_release(&filesys_lock);
   }
 }
 
@@ -227,9 +226,9 @@ static void syscall_tell(struct intr_frame *f) {
 
   /* If a file is found, get next byte to be read */
   if(file != NULL) {
-    syscall_acquire_lock(&filesys_lock);
+    lock_acquire(&filesys_lock);
     position = (unsigned) file_tell(file->file);
-    syscall_release_lock(&filesys_lock);
+    lock_release(&filesys_lock);
   }
   
   return_value_to_frame(f, (uint32_t) position);
@@ -242,9 +241,9 @@ static void syscall_close(struct intr_frame *f) {
   struct file_elem *file = get_file(t, fd);
 
   if(file != NULL) {
-    syscall_acquire_lock(&filesys_lock);
+    lock_acquire(&filesys_lock);
     file_close(file->file);
-    syscall_release_lock(&filesys_lock);
+    lock_release(&filesys_lock);
     
     /* Remove file_elem struct from list of files and
        free allocated memory */
@@ -271,31 +270,6 @@ static void *get_argument(void *esp, int arg_no) {
 
 static void return_value_to_frame(struct intr_frame *f, uint32_t val) {
   f->eax = val;
-}
-
-/* Needs to be thread-safe!
-   Not sure if this is needed, but we need some way of finding
-   which locks are held by the thread */
-static void syscall_acquire_lock(struct lock *lock) {
-  // acquire the lock and add it to a list
-  lock_acquire(lock);
-  struct lock_elem *lock_elem = malloc(sizeof(struct lock_elem));
-  lock_elem->lock = lock;
-  list_push_back(&thread_current()->held_locks, &lock_elem->elem);
-}
-
-//TODO: make this edit the list of thread's held locks
-static void syscall_release_lock(struct lock *lock) {
-  struct list_elem *e = list_head (&thread_current()->held_locks);
-  struct lock_elem *curr_lock = list_entry(e, struct lock_elem, elem);
-
-  while(curr_lock->lock == lock &&
-	(e = list_next (e)) != list_end (&thread_current()->held_locks)) {
-    curr_lock = list_entry(e, struct lock_elem, elem);
-  }
-  list_remove(&curr_lock->elem);
-  lock_release(lock);
-  free(curr_lock);
 }
 
 /* Takes in a thread and a file descriptor
