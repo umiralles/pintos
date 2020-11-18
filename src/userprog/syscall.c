@@ -6,6 +6,7 @@
 #include "filesys/off_t.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/directory.h"
 #include "userprog/pagedir.h"
 #include "userprog/syscall.h"
 #include "devices/shutdown.h"
@@ -30,6 +31,8 @@ static void syscall_close(struct intr_frame *f);
 
 /* MEMORY ACCESS FUNCTION */
 static void syscall_access_memory(const void *vaddr);
+static void syscall_access_filename(const char *name);
+static void syscall_access_string(const char *str);
 
 /* HELPER FUNCTIONS */
 static void *get_argument(void *esp, int arg_no);
@@ -70,21 +73,25 @@ static void syscall_exit(struct intr_frame *f) {
 }
 
 static void syscall_create(struct intr_frame *f) {
-  const char *file = GET_ARGUMENT_VALUE(f, char *, 1);
+  const char *name = GET_ARGUMENT_VALUE(f, char *, 1);
   uint32_t initial_size = GET_ARGUMENT_VALUE(f, uint32_t, 2);
 
+  syscall_access_filename(name);
+  
   lock_acquire(&filesys_lock);
-  bool res = filesys_create(file, (off_t) initial_size); 
+  bool res = filesys_create(name, (off_t) initial_size); 
   lock_release(&filesys_lock);
   
   return_value_to_frame(f, (uint32_t) res);
 }
 
 static void syscall_remove(struct intr_frame *f) {
-  const char *file = GET_ARGUMENT_VALUE(f, char *, 1);
+  const char *name = GET_ARGUMENT_VALUE(f, char *, 1);
 
+  syscall_access_filename(name);
+  
   lock_acquire(&filesys_lock);
-  bool res = filesys_remove(file);
+  bool res = filesys_remove(name);
   lock_release(&filesys_lock);
 
   return_value_to_frame(f, (uint32_t) res);
@@ -93,6 +100,8 @@ static void syscall_remove(struct intr_frame *f) {
 static void syscall_open(struct intr_frame *f) {
   const char *name = GET_ARGUMENT_VALUE(f, char *, 1);
   int fd = -1;
+
+  syscall_access_filename(name);
 
   lock_acquire(&filesys_lock);
   struct file *file = filesys_open(name);
@@ -149,7 +158,7 @@ static void syscall_read(struct intr_frame *f) {
   
   int bytes_read = -1;
 
-  /* Check for safe user memory access */
+  /* Check entire buffer is in valid memory */
   syscall_access_memory(buffer);
   syscall_access_memory(buffer + size);
   
@@ -183,6 +192,7 @@ static void syscall_write(struct intr_frame *f) {
 
   struct thread *t = thread_current();
 
+  /* Checks entire buffer is in valid memory */
   syscall_access_memory(buffer);
   syscall_access_memory(buffer + size);
   
@@ -256,10 +266,40 @@ static void syscall_close(struct intr_frame *f) {
 
 /* MEMORY ACCESS FUNCTION */
 
+/* Checks validity of any user supplied pointer
+   A valid pointer is one that is in user space and on an allocated page
+*/
 static void syscall_access_memory(const void *vaddr) {
   struct thread *t = thread_current();
   if(!(is_user_vaddr(vaddr) && pagedir_get_page(t->pagedir, vaddr))) {
     thread_exit();
+  }
+}
+
+/* Checks validity and length of a filename */
+static void syscall_access_filename(const char *name) {
+  const char *curr = name;
+  int i = 0;
+
+  while(*curr != '\0' && i < NAME_MAX) {
+    syscall_access_memory(curr);
+    curr++;
+    i++;
+  }
+
+  /* File name is too long and will break the file system */
+  if(i == NAME_MAX) {
+    thread_exit();
+  }
+}
+
+/* Checks validity of all char addresses in a string */
+static void syscall_access_string(const char *str) {
+  const char *curr = str;
+
+  while(*curr != '\0') {
+    syscall_access_memory(curr);
+    curr++;
   }
 }
 
