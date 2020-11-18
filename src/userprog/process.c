@@ -122,8 +122,8 @@ start_process (void *file_name_)
     thread_current()->tid_elem->has_faulted = true;
     /* Sema up to let parent continue at failure */
     sema_up(&thread_current()->tid_elem->child_semaphore);
-    thread_exit ();
     palloc_free_page(arg_page);
+    thread_exit ();
   }
 
   struct argument *argument;
@@ -264,7 +264,9 @@ process_exit (void)
       write(STDOUT_FILENO, buffer, length);
       */
 
-      printf("%s: exit(%d)\n", t->name, t->tid_elem->exit_status);
+      char *name = t->name;
+      char* token = strtok_r(name, " ", &name);
+      printf("%s: exit(%d)\n", token, t->tid_elem->exit_status);
 
       struct list_elem *child_elem = list_begin(&t->child_tid_list);
       struct tid_elem *child;
@@ -283,8 +285,19 @@ process_exit (void)
       
       /* Create local tid_elem to be able to reference it after
          pagedir_destroy. */
-      struct tid_elem *tid_elem = thread_current()->tid_elem;
-      
+      struct tid_elem *tid_elem = thread_current()->tid_elem;      
+ 
+      /* If parent process is dead then free shared tid_elem
+         otherwise sema_up for if the parent process is waiting.
+	 Need to do it at the end of process_exit to ensure
+	 parent process wakes up at the correct point. */ 
+      if(tid_elem->process_dead) {
+        //lock_release(&tid_elem->tid_elem_lock);
+        free(tid_elem);
+      } else {
+        tid_elem->process_dead = true;
+        sema_up(&tid_elem->child_semaphore);
+      }
 
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
@@ -296,21 +309,7 @@ process_exit (void)
       t->pagedir = NULL;
       pagedir_activate (NULL);
       pagedir_destroy (pd);
-      
-      /* If parent process is dead then free shared tid_elem
-         otherwise sema_up for if the parent process is waiting.
-	 Need to do it at the end of process_exit to ensure
-	 parent process wakes up at the correct point. */
-      lock_acquire(&tid_elem->tid_elem_lock);
-      if(tid_elem->process_dead) {
-        lock_release(&tid_elem->tid_elem_lock);
-        free(tid_elem);
-      } else {
-        tid_elem->process_dead = true;
-        sema_up(&tid_elem->child_semaphore);
-        lock_release(&tid_elem->tid_elem_lock);
-      }
-    }
+     }
 }
 
 /* Sets up the CPU for running user code in the current
