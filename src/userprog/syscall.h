@@ -14,22 +14,11 @@
    arguments and return location found in f */
 typedef void (*syscall_func)(struct intr_frame *f);
 
-/* !!! CURRENTLY both structs in the .h file are there 
-   to help with readability - can be moved in the .c 
-   upon further consideration !!!*/
-
 /* File element struct */
 struct file_elem {
   int fd;
   struct file *file;
   struct list_elem elem;
-};
-
-/* One lock in a list. */
-
-struct lock_elem {
-  struct list_elem elem;              /* List element. */
-  struct lock *lock;         	      /* This lock. */
 };
 
 void syscall_init (void);

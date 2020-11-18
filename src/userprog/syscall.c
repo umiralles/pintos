@@ -152,7 +152,7 @@ static void syscall_open(struct intr_frame *f) {
     current_file->file = file;
 
     list_push_back(&t->files, &current_file->elem);
-  }
+  } 
 
   lock_release(&filesys_lock);
 
@@ -289,6 +289,9 @@ static void syscall_close(struct intr_frame *f) {
        free allocated memory */
     list_remove(&file->elem);
     free(file);
+
+  } else {
+    thread_exit();
   }
 }
 
@@ -310,11 +313,11 @@ static void syscall_access_filename(const char *name) {
   const char *curr = name;
   int i = 0;
 
-  while(*curr != '\0' && i < NAME_MAX) {
+  do {
     syscall_access_memory(curr);
     curr++;
     i++;
-  }
+  } while(*curr != '\0' && i < NAME_MAX);
 
   /* File name is too long and will break the file system */
   if(i == NAME_MAX) {
@@ -326,10 +329,10 @@ static void syscall_access_filename(const char *name) {
 static void syscall_access_string(const char *str) {
   const char *curr = str;
 
-  while(*curr != '\0') {
+  do {
     syscall_access_memory(curr);
     curr++;
-  }
+  } while(*curr != '\0');
 }
 
 /* HELPER FUNCTIONS */
@@ -352,7 +355,8 @@ static struct file_elem* get_file(struct thread *t, int fd) {
     return NULL;
   }
 
-  /* fd cannot exist so we short circuit the list traversal and return null */
+  /* fd cannot exist so we short circuit the list
+     traversal and return null */
   if(fd >= t->next_available_fd) {
     return NULL;
   }
