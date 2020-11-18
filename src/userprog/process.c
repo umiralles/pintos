@@ -49,6 +49,10 @@ process_execute (const char *file_name)
   
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create(file_name, PRI_DEFAULT, start_process, fn_copy);
+ 
+  if(tid == TID_ERROR) {
+    palloc_free_page(fn_copy);
+  }
 
   struct tid_elem *curr;
   struct list_elem *curr_elem = list_begin(&thread_current()->child_tid_list);
@@ -62,18 +66,11 @@ process_execute (const char *file_name)
 
     curr_elem = list_next(curr_elem);
   }
-
-  if (!match) {
-    tid = TID_ERROR;
-  } else {
+  if(match) { 
     sema_down(&curr->child_semaphore);
     if(curr->has_faulted) {
       tid = TID_ERROR;
     }
-  }
-
-  if(tid == TID_ERROR) {
-    palloc_free_page(fn_copy);
   }
   
   return tid;

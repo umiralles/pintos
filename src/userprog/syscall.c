@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <syscall-nr.h>
 #include "threads/thread.h"
 #include "threads/synch.h"
@@ -86,9 +87,8 @@ static void syscall_exec(struct intr_frame *f) {
 
   int child_tid = process_execute(cmd_line);
 
-  if(child_tid == TID_ERROR) {
-    return_value_to_frame(f, (uint32_t) -1);    
-    return;
+  if(child_tid == TID_ERROR) { 
+    child_tid = -1;
   }
   
   return_value_to_frame(f, (uint32_t) child_tid);
