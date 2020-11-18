@@ -247,6 +247,7 @@ thread_create (const char *name, int priority,
   t->tid_elem = malloc(sizeof(struct tid_elem));
   t->tid_elem->tid = tid;
   t->tid_elem->exit_status = -1;
+  t->tid_elem->process_dead = false;
   t->tid_elem->has_faulted = false;
   sema_init(&t->tid_elem->child_semaphore, 0);
   lock_init(&t->tid_elem->tid_elem_lock);
@@ -258,7 +259,7 @@ thread_create (const char *name, int priority,
     t->nice = thread_current()->nice;
     t->recent_cpu = thread_current()->recent_cpu;
     t->priority = calc_mlfqs_priority(t);
-    t->effective_priority = t->priority; 
+    t->effective_priority = t->priority;
   }
   
   /* Prepare thread for first run by initializing its stack.

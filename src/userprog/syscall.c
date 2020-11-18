@@ -84,28 +84,6 @@ static void syscall_exec(struct intr_frame *f) {
     return_value_to_frame(f, (uint32_t) -1);    
     return;
   }
-
-  struct tid_elem *curr;
-  struct list_elem *curr_elem = list_begin(&thread_current()->child_tid_list);
-  bool match = false;
-  while (curr_elem != list_end(&thread_current()->child_tid_list) && !match) {
-    curr = list_entry(curr_elem, struct tid_elem, elem);
-    
-    if (curr->tid == child_tid) {
-      match = true;
-    }
-
-    curr_elem = list_next(curr_elem);
-  }
-
-  if (!match) {
-    child_tid = -1;
-  } else {
-    sema_down(&curr->child_semaphore);
-    if(curr->has_faulted) {
-      child_tid = -1;
-    }
-  }
   
   return_value_to_frame(f, (uint32_t) child_tid);
 }
