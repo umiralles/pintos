@@ -179,25 +179,27 @@ static void syscall_write(struct intr_frame *f) {
   int fd = GET_ARGUMENT_VALUE(f, int, 1);
   const void *buffer = GET_ARGUMENT_VALUE(f, void *, 2);
   unsigned size = GET_ARGUMENT_VALUE(f, unsigned, 3);
-  off_t bytes_written;
+  int bytes_written = -1;
+
+  struct thread *t = thread_current();
+
+  syscall_access_memory(buffer);
+  syscall_access_memory(buffer + size);
   
   if(fd == STDOUT_FILENO) {
     putbuf(buffer, size);
     bytes_written = (off_t) size;
   } else {
-    struct list_elem *e = list_begin(&thread_current()->files);	  
-    struct file_elem *file_elem = list_entry(e, struct file_elem, elem);
-    
-    while(file_elem->fd != fd) {
-      e = list_next(e);
-      file_elem = list_entry(e, struct file_elem, elem);
+    struct file_elem *file = get_file(t, fd);
+
+    if (file != NULL) {
+      lock_acquire(&filesys_lock);
+      bytes_written = file_write(file->file, buffer, (off_t) size);
+      lock_release(&filesys_lock);
     }
-    
-    syscall_access_memory(file_elem->file); 
-    bytes_written = file_write(file_elem->file, buffer, (off_t) size);
   }
   
-  f->eax = bytes_written;
+  return_value_to_frame(f, (uint32_t) bytes_written);
 }
 
 static void syscall_seek(struct intr_frame *f) {
