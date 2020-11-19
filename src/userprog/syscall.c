@@ -65,10 +65,14 @@ static void syscall_handler(struct intr_frame *f) {
   syscalls[call_no](f);
 }
 
+/* Terminates the operating system */
 static void syscall_halt(struct intr_frame *f UNUSED) {
   shutdown_power_off();  
 }
 
+/* Exits a process;
+   Takes in an int representing the exit status;
+   Returns its exit status */
 static void syscall_exit(struct intr_frame *f) {
   int status = GET_ARGUMENT_VALUE(f, int, 1);
 
@@ -80,6 +84,9 @@ static void syscall_exit(struct intr_frame *f) {
   thread_exit();
 }
 
+/* Runs the executable;
+   Takes in the name of the executable given in cmd_line;
+   Returns the id of the child thread created or -1 if error */
 static void syscall_exec(struct intr_frame *f) {
   const char *cmd_line = GET_ARGUMENT_VALUE(f, char *, 1);
 
@@ -94,12 +101,19 @@ static void syscall_exec(struct intr_frame *f) {
   return_value_to_frame(f, (uint32_t) child_tid);
 }
 
+/* Waits for a child process;
+   Takes in a tid_t representing the child's tid;
+   Returns child's exit status */
 static void syscall_wait(struct intr_frame *f) {
   tid_t tid = GET_ARGUMENT_VALUE(f, tid_t, 1);
   int res = process_wait(tid);
+  
   return_value_to_frame(f, (uint32_t) res);
 }
 
+/* Creates a new file;
+   Takes in name of the file to be created;
+   Returns boolean stating whether it was successful */
 static void syscall_create(struct intr_frame *f) {
   const char *name = GET_ARGUMENT_VALUE(f, char *, 1);
   uint32_t initial_size = GET_ARGUMENT_VALUE(f, uint32_t, 2);
@@ -114,6 +128,9 @@ static void syscall_create(struct intr_frame *f) {
   return_value_to_frame(f, (uint32_t) res);
 }
 
+/* Removes a file;
+   Takes in the name of the file to be deleted;
+   Returns boolean stating whether file was successfully deleted */
 static void syscall_remove(struct intr_frame *f) {
   const char *name = GET_ARGUMENT_VALUE(f, char *, 1);
   bool res = false;
@@ -127,6 +144,9 @@ static void syscall_remove(struct intr_frame *f) {
   return_value_to_frame(f, (uint32_t) res);
 }
 
+/* Opens a file into the current thread;
+   Takes in the name of the file to be opened;
+   Returns the fd of the file or -1 if unsuccessful */
 static void syscall_open(struct intr_frame *f) {
   const char *name = GET_ARGUMENT_VALUE(f, char *, 1);
   int fd = -1;
@@ -159,7 +179,9 @@ static void syscall_open(struct intr_frame *f) {
   return_value_to_frame(f, (uint32_t) fd);  
 }
 
-/* Returns either the size of a file in bytes 
+/* Gets the filesize of the file;
+   Takes in the fd of the file; 
+   Returns either the size of a file in bytes
    or -1 if the file cannot be accessed */
 static void syscall_filesize(struct intr_frame *f) {
   int fd = GET_ARGUMENT_VALUE(f, int, 1);
@@ -178,6 +200,11 @@ static void syscall_filesize(struct intr_frame *f) {
   return_value_to_frame(f, (uint32_t) filesize);
 }
 
+/* Reads the data from a file into a buffer;
+   Takes in the fd of the file, pointer to a buffer to read into 
+   and the maximum number of bytes to read;
+   Returns the number of bytes read or -1 if unsuccessful;
+   Can kill the thread if buffer is not in valid user memory */
 static void syscall_read(struct intr_frame *f) {
   int fd = GET_ARGUMENT_VALUE(f, int, 1);
   uint8_t *buffer = (uint8_t *) GET_ARGUMENT_VALUE(f, void *, 2);
@@ -186,10 +213,11 @@ static void syscall_read(struct intr_frame *f) {
   
   int bytes_read = -1;
 
-  /* Check entire buffer is in valid memory */
+  /* Checks entire buffer is in valid user memory */
   syscall_access_memory(buffer);
   syscall_access_memory(buffer + size);
-  
+
+  /* Reads from the keyboard instead of from a file */
   if(fd == STDIN_FILENO) {
     uint8_t key;
     bytes_read = 0;
@@ -212,6 +240,11 @@ static void syscall_read(struct intr_frame *f) {
   return_value_to_frame(f, (uint32_t) bytes_read);
 }
 
+/* Writes the data from a file into a buffer;
+   Takes in the fd of the file, pointer to a buffer to write into 
+   and the maximum number of bytes to write;
+   Returns the number of bytes written or -1 if unsuccessful;
+   Can kill the thread if buffer is not in valid user memory */
 static void syscall_write(struct intr_frame *f) {
   int fd = GET_ARGUMENT_VALUE(f, int, 1);
   const void *buffer = GET_ARGUMENT_VALUE(f, void *, 2);
@@ -220,10 +253,10 @@ static void syscall_write(struct intr_frame *f) {
 
   struct thread *t = thread_current();
 
-  /* Checks entire buffer is in valid memory */
+  /* Checks entire buffer is in valid user memory */
   syscall_access_memory(buffer);
   syscall_access_memory(buffer + size);
-  
+
   if(fd == STDOUT_FILENO) {
     putbuf(buffer, size);
     bytes_written = (off_t) size;
@@ -241,6 +274,8 @@ static void syscall_write(struct intr_frame *f) {
   return_value_to_frame(f, (uint32_t) bytes_written);
 }
 
+/* Changes the next byte to be read or written to position;
+   Takes in the fd of the file and the position to change to */
 static void syscall_seek(struct intr_frame *f) {
   int fd = GET_ARGUMENT_VALUE(f, int, 1);
   unsigned position = GET_ARGUMENT_VALUE(f, unsigned, 2);
@@ -257,10 +292,14 @@ static void syscall_seek(struct intr_frame *f) {
   }
 }
 
+/* Gets the position of next byte to be read or written;
+   Takes in the fd of the file;
+   Returns the position of the next byte to be read or written
+   or -1 if there is an error */
 static void syscall_tell(struct intr_frame *f) {
   int fd = GET_ARGUMENT_VALUE(f, int, 1);
   unsigned position = -1;
-
+  
   struct thread *t = thread_current();
 
   struct file_elem *file = get_file(t, fd);
@@ -275,12 +314,15 @@ static void syscall_tell(struct intr_frame *f) {
   return_value_to_frame(f, (uint32_t) position);
 }
 
+/* Closes a file for the current thread;
+   Takes in the fd of the file to be closed;
+   Can kill the thread if file doesn't exist */
 static void syscall_close(struct intr_frame *f) {
   int fd = GET_ARGUMENT_VALUE(f, int, 1);
   struct thread *t = thread_current();
 
   struct file_elem *file = get_file(t, fd);
-
+  
   if(file != NULL) {
     lock_acquire(&filesys_lock);
     file_close(file->file);
@@ -297,11 +339,9 @@ static void syscall_close(struct intr_frame *f) {
 }
 
 /* MEMORY ACCESS FUNCTION */
-/* Release any acquired locks before calling syscall_access_memory. */
 
 /* Checks validity of any user supplied pointer
-   A valid pointer is one that is in user space and on an allocated page
-*/
+   A valid pointer is one that is in user space and on an allocated page */
 static void syscall_access_memory(const void *vaddr) {
   struct thread *t = thread_current();
   if(!(is_user_vaddr(vaddr) && pagedir_get_page(t->pagedir, vaddr))) {
@@ -338,19 +378,20 @@ static void syscall_access_string(const char *str) {
 
 /* HELPER FUNCTIONS */
 
+/* Gets a pointer to the argument number arg_no off the stack */
 static void *get_argument(void *esp, int arg_no) {
   syscall_access_memory(esp + arg_no * 4);
   return  esp + arg_no * 4;
 }
 
+/* Stores a return value to a frame's eax */
 static void return_value_to_frame(struct intr_frame *f, uint32_t val) {
   f->eax = val;
 }
 
 /* Takes in a thread and a file descriptor
    Returns the file with file descriptor equal to fd
-   Returns NULL if no such file could be found
-*/
+   Returns NULL if no such file could be found */
 static struct file_elem* get_file(struct thread *t, int fd) {
   if(fd <= STDOUT_FILENO) {
     return NULL;

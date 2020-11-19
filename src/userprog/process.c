@@ -23,24 +23,7 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 static void push_word_to_stack(struct intr_frame *if_, int32_t val);
-
-
-/* Used in start_process to keep track of the parsed arguments */
-struct argument {
-  char *arg;                 /* Tokenised argument from the command line */
-  struct list_elem arg_elem; /* Places argument in global list of arguments */
-};
-
-/* Frees all malloc-ed argument structs and the arg_page */
-static void clean_arguments(struct list *arg_list, void *arg_page) {
-  struct list_elem *e = list_begin(arg_list);
-  while (e != list_end(arg_list)) {
-    struct argument *arg = list_entry(e, struct argument, arg_elem);
-    e = list_next(e);
-    free(arg);
-  }
-  palloc_free_page(arg_page);
-}
+static void clean_arguments(struct list *arg_list, void *arg_page);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -87,6 +70,12 @@ process_execute (const char *file_name)
   
   return tid;
 }
+
+/* Used in start_process to keep track of the parsed arguments */
+struct argument {
+  char *arg;                 /* Tokenised argument from the command line */
+  struct list_elem arg_elem; /* Places argument in global list of arguments */
+};
 
 /* A thread function that loads a user process and starts it
    running. */
@@ -208,6 +197,18 @@ start_process (void *file_name_)
      and jump to it. */
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
+}
+
+/* Used for argument parsing
+   Frees all malloc-ed argument structs and the arg_page */
+static void clean_arguments(struct list *arg_list, void *arg_page) {
+  struct list_elem *e = list_begin(arg_list);
+  while (e != list_end(arg_list)) {
+    struct argument *arg = list_entry(e, struct argument, arg_elem);
+    e = list_next(e);
+    free(arg);
+  }
+  palloc_free_page(arg_page);
 }
 
 /* Used for argument parsing 
