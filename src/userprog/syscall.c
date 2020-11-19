@@ -34,8 +34,9 @@ static void syscall_close(struct intr_frame *f);
 
 /* MEMORY ACCESS FUNCTION */
 static void syscall_access_memory(const void *vaddr);
-static void syscall_access_filename(const char *name);
 static void syscall_access_string(const char *str);
+static bool check_filename(const char *name);
+
 
 /* HELPER FUNCTIONS */
 static void *get_argument(void *esp, int arg_no);
@@ -103,25 +104,27 @@ static void syscall_wait(struct intr_frame *f) {
 static void syscall_create(struct intr_frame *f) {
   const char *name = GET_ARGUMENT_VALUE(f, char *, 1);
   uint32_t initial_size = GET_ARGUMENT_VALUE(f, uint32_t, 2);
-
-  syscall_access_filename(name);
+  bool res = false;
   
+  if(check_filename(name)) {
   lock_acquire(&filesys_lock);
-  bool res = filesys_create(name, (off_t) initial_size); 
+  res = filesys_create(name, (off_t) initial_size); 
   lock_release(&filesys_lock);
+  }
   
   return_value_to_frame(f, (uint32_t) res);
 }
 
 static void syscall_remove(struct intr_frame *f) {
   const char *name = GET_ARGUMENT_VALUE(f, char *, 1);
-
-  syscall_access_filename(name);
+  bool res = false;
   
-  lock_acquire(&filesys_lock);
-  bool res = filesys_remove(name);
-  lock_release(&filesys_lock);
-
+  if(check_filename(name)) {
+    lock_acquire(&filesys_lock);
+    res = filesys_remove(name);
+    lock_release(&filesys_lock);
+  }
+  
   return_value_to_frame(f, (uint32_t) res);
 }
 
@@ -129,33 +132,31 @@ static void syscall_open(struct intr_frame *f) {
   const char *name = GET_ARGUMENT_VALUE(f, char *, 1);
   int fd = -1;
 
-  syscall_access_filename(name);
-
-  lock_acquire(&filesys_lock);
-  struct file *file = filesys_open(name);
-
-  if(file != NULL) {
-    struct thread *t = thread_current();
-
-    struct file_elem *current_file = malloc(sizeof(struct file_elem));
-
-    /* If process runs out of memory, kill it */
-    if(current_file == NULL) {
-      lock_release(&filesys_lock);
-      thread_exit();
-    }
+  if(check_filename(name)) {
+    lock_acquire(&filesys_lock);
+    struct file *file = filesys_open(name);
     
-    fd = t->next_available_fd;
-    t->next_available_fd++;
+    if(file != NULL) {
+      struct thread *t = thread_current();
 
-    current_file->fd = fd;
-    current_file->file = file;
+      struct file_elem *current_file = malloc(sizeof(struct file_elem));
 
-    list_push_back(&t->files, &current_file->elem);
-  } 
+      /* If process runs out of memory, kill it */
+      if(current_file == NULL) {
+	lock_release(&filesys_lock);
+	thread_exit();
+      }      
+      fd = t->next_available_fd;
+      t->next_available_fd++;
 
-  lock_release(&filesys_lock);
+      current_file->fd = fd;
+      current_file->file = file;
 
+      list_push_back(&t->files, &current_file->elem);
+    } 
+    lock_release(&filesys_lock);
+  }
+  
   return_value_to_frame(f, (uint32_t) fd);  
 }
 
@@ -309,20 +310,21 @@ static void syscall_access_memory(const void *vaddr) {
 }
 
 /* Checks validity and length of a filename */
-static void syscall_access_filename(const char *name) {
+static bool check_filename(const char *name) {
   const char *curr = name;
   int i = 0;
-
+  
   do {
     syscall_access_memory(curr);
-    curr++;
     i++;
-  } while(*curr != '\0' && i < NAME_MAX);
+  } while(*(curr++) != '\0' && i < NAME_MAX);
 
   /* File name is too long and will break the file system */
   if(i == NAME_MAX) {
-    thread_exit();
+    return false;
   }
+  
+  return true;
 }
 
 /* Checks validity of all char addresses in a string */
@@ -331,8 +333,7 @@ static void syscall_access_string(const char *str) {
 
   do {
     syscall_access_memory(curr);
-    curr++;
-  } while(*curr != '\0');
+  } while(*(curr++) != '\0');
 }
 
 /* HELPER FUNCTIONS */
