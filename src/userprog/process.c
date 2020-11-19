@@ -24,11 +24,23 @@ static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 static void push_word_to_stack(struct intr_frame *if_, int32_t val);
 
+
+/* Used in start_process to keep track of the parsed arguments */
 struct argument {
   char *arg;                 /* Tokenised argument from the command line */
   struct list_elem arg_elem; /* Places argument in global list of arguments */
 };
 
+/* Frees all malloc-ed argument structs and the arg_page */
+static void clean_arguments(struct list *arg_list, void *arg_page) {
+  struct list_elem *e = list_begin(arg_list);
+  while (e != list_end(arg_list)) {
+    struct argument *arg = list_entry(e, struct argument, arg_elem);
+    e = list_next(e);
+    free(arg);
+  }
+  palloc_free_page(arg_page);
+}
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -107,10 +119,8 @@ start_process (void *file_name_)
   
   for(token = strtok_r (file_name, " ", &save_ptr); token != NULL;
       token = strtok_r (NULL, " ", &save_ptr)) {
-    current_arg = (struct argument*) next_arg_location;
-    
-    next_arg_location += sizeof(struct argument);
-    
+    current_arg = malloc(sizeof(struct argument));
+        
     current_arg->arg = next_arg_location;    
     strlcpy(current_arg->arg, token, PGSIZE);
     
@@ -119,6 +129,7 @@ start_process (void *file_name_)
     next_arg_location += strlen(token) + 1;
     if(next_arg_location - arg_page > PGSIZE) {
       thread_current()->tid_elem->has_faulted = true;
+
       /* Sema up to let parent continue at failure */
       sema_up(&thread_current()->tid_elem->child_semaphore);
       thread_exit();
@@ -142,7 +153,8 @@ start_process (void *file_name_)
     thread_current()->tid_elem->has_faulted = true;
     /* Sema up to let parent continue at failure */
     sema_up(&thread_current()->tid_elem->child_semaphore);
-    palloc_free_page(arg_page);
+
+    clean_arguments(&arg_list, arg_page);
     thread_exit ();
   }
 
@@ -183,7 +195,7 @@ start_process (void *file_name_)
   push_word_to_stack(&if_, argc);
   push_word_to_stack(&if_, (int32_t) 0);
 
-  palloc_free_page(arg_page);
+  clean_arguments(&arg_list, arg_page);
 
   /* If load is complete, sema_up to allow the parent to continue */
   sema_up(&thread_current()->tid_elem->child_semaphore);
