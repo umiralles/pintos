@@ -313,8 +313,8 @@ process_exit (void)
 	
       } else {
         t->tid_elem->process_dead = true;
-	sema_up(&t->tid_elem->child_semaphore);
 	lock_release(&t->tid_elem->tid_elem_lock);
+	sema_up(&t->tid_elem->child_semaphore);
       }
 
       file_close(t->executable);
