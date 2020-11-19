@@ -2,6 +2,7 @@
 #define USERPROG_SYSCALL_H
 
 #include "threads/interrupt.h"
+#include "filesys/file.h"
 
 /* The number of implemented and working system calls in the syscall table */
 #define MAX_SYSCALLS (13)

@@ -6,7 +6,6 @@
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
 #include "filesys/off_t.h"
-#include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "filesys/directory.h"
 #include "userprog/pagedir.h"
@@ -228,12 +227,13 @@ static void syscall_write(struct intr_frame *f) {
   if(fd == STDOUT_FILENO) {
     putbuf(buffer, size);
     bytes_written = (off_t) size;
+    
   } else {
-    struct file_elem *file = get_file(t, fd);
+    struct file_elem *file_elem = get_file(t, fd);
 
-    if (file != NULL) {
+    if (file_elem != NULL) {
       lock_acquire(&filesys_lock);
-      bytes_written = file_write(file->file, buffer, (off_t) size);
+      bytes_written = file_write(file_elem->file, buffer, (off_t) size);
       lock_release(&filesys_lock);
     }
   }

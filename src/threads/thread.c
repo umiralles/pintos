@@ -629,6 +629,7 @@ init_thread (struct thread *t, const char *name, int priority)
   sema_init(&t->donations_sema, 1);
 
 #ifdef USERPROG
+  t->executable = NULL;
   list_init(&t->files);
   t->next_available_fd = STDOUT_FILENO + 1;
   list_init(&t->child_tid_list);

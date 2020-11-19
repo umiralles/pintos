@@ -124,6 +124,7 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    struct file *executable;            /* Open executable file */
     struct list files;			/* List of file descriptors */
     int next_available_fd;              /* next available file descriptor */
     struct list child_tid_list;         /* List of elements in tid_elem structs
