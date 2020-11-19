@@ -268,6 +268,7 @@ process_exit (void)
   while (!list_empty(&t->files)) {
     current = list_pop_front(&t->files);
     current_file = list_entry(current, struct file_elem, elem);
+    file_close(current_file->file);
     free(current_file);
   }
 
@@ -277,16 +278,6 @@ process_exit (void)
   if (pd != NULL) 
     {
       /* Printing termination messages */
-      /*
-      int MAX_INT_LEN = 10;
-      int max_len = strlen(": exit()\n") + strlen(t->name) + MAX_INT_LEN;
-      char buffer[max_len];
-      int length = snprintf(buffer, max_len, "%s: exit(%d)\n", t->name,
-        	    t->tid_elem->exit_status);
-      
-      write(STDOUT_FILENO, buffer, length);
-      */
-
       char *name = t->name;
       char* token = strtok_r(name, " ", &name);
       printf("%s: exit(%d)\n", token, t->tid_elem->exit_status);
