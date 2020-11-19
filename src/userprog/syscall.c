@@ -77,7 +77,7 @@ static void syscall_exit(struct intr_frame *f) {
   thread_current()->tid_elem->exit_status = status;
 
   return_value_to_frame(f, (uint32_t) status);
-  process_exit();
+  thread_exit();
 }
 
 static void syscall_exec(struct intr_frame *f) {

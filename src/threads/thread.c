@@ -633,7 +633,6 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&t->files);
   t->next_available_fd = STDOUT_FILENO + 1;
   list_init(&t->child_tid_list);
-  t->tid_elem = NULL;
 #endif
 
   t->magic = THREAD_MAGIC;
