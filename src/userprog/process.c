@@ -256,6 +256,7 @@ process_wait (tid_t child_tid)
   if(match) {
     if(!curr_elem->process_dead) {
       sema_down(&curr_elem->child_semaphore);
+      lock_acquire(&curr_elem->tid_list_lock);
     }
 
     /* If after sema_down the child process is still not dead then there
@@ -333,8 +334,8 @@ process_exit (void)
 	
       } else {
         t->tid_elem->process_dead = true;
-	lock_release(&t->tid_elem->tid_elem_lock);
 	sema_up(&t->tid_elem->child_semaphore);
+	lock_release(&t->tid_elem->tid_elem_lock);
       }
 
       /* Close processe's executable (will allow write) */
