@@ -17,9 +17,10 @@ typedef void (*syscall_func)(struct intr_frame *f);
 
 /* File element struct */
 struct file_elem {
-  int fd;
-  struct file *file;
-  struct list_elem elem;
+  int fd;                  /* File descriptor for the file */
+  struct file *file;       /* Pointer to the open file */
+  struct list_elem elem;   /* An element to be inserted into the
+			      list of files */
 };
 
 void syscall_init (void);

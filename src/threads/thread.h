@@ -4,7 +4,6 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-
 #include "synch.h"
 #include "threads/fixed-point.h"
 
@@ -129,7 +128,7 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
     struct file *executable;            /* Open executable file */
     struct list files;			/* List of file descriptors */
-    int next_available_fd;              /* next available file descriptor */
+    int next_available_fd;              /* Next available file descriptor */
     struct list child_tid_list;         /* List of tid_elem structs
 					   corresponding to children */
     struct tid_elem *tid_elem;          /* Pointer to this thread's
