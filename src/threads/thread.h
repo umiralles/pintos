@@ -27,18 +27,21 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
-/* Element for use in a list of tids and exit statuses of terminated threads.
+/* Element for use in a list of child processes of a parent thread.
    Used in the thread struct and userprog/process.c */
 struct tid_elem {
-  tid_t tid;                          /* tid of a terminated thread */
-  bool process_dead;		      /* True if one of the processes
-					 terminated */
-  bool has_faulted;		      /* True when process exits erroneously duing startup */
-  int exit_status;                    /* Exit status of thread tid */
   struct list_elem elem;              /* Element to store in a list */
   struct semaphore child_semaphore;   /* Semaphore used in process_wait to
-					 halt the parent thread */
-  struct lock tid_elem_lock;          /* Lock shared between parent and child */
+					 halt the parent thread and to wait
+					 for child to load executable */
+  struct lock tid_elem_lock;          /* Lock shared between parent and
+					 child */
+  tid_t tid;                          /* tid of the child process */
+  int exit_status;                    /* Exit status of child thread */
+  bool process_dead;		      /* True if one of the processes
+					 terminated */
+  bool has_faulted;		      /* True when process exits erroneously
+					 duing startup */
 };
 
 /* A kernel thread or user process.
@@ -127,10 +130,11 @@ struct thread
     struct file *executable;            /* Open executable file */
     struct list files;			/* List of file descriptors */
     int next_available_fd;              /* next available file descriptor */
-    struct list child_tid_list;         /* List of elements in tid_elem structs
+    struct list child_tid_list;         /* List of tid_elem structs
 					   corresponding to children */
-    struct tid_elem *tid_elem;          /* Pointer to this thread's tid_elem in
-					   its parent's child_tid_list */
+    struct tid_elem *tid_elem;          /* Pointer to this thread's
+					   tid_elem in its parent's
+					   child_tid_list */
 #endif
 
     /* Owned by thread.c. */

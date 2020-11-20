@@ -1,4 +1,3 @@
-#include "userprog/process.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -7,8 +6,9 @@
 #include <string.h>
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
-#include "userprog/tss.h"
+#include "userprog/process.h"
 #include "userprog/syscall.h"
+#include "userprog/tss.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -49,25 +49,28 @@ process_execute (const char *file_name)
     palloc_free_page(fn_copy);
   }
 
+  /* Find the newly created child in the child_tid_list and sema_down
+     the child_semaphore waiting for it to load it's executable */
   struct tid_elem *curr;
   struct list_elem *curr_elem = list_begin(&thread_current()->child_tid_list);
   bool match = false;
-  while (curr_elem != list_end(&thread_current()->child_tid_list) && !match) {
+  while(curr_elem != list_end(&thread_current()->child_tid_list) && !match) {
     curr = list_entry(curr_elem, struct tid_elem, elem);
-    
-    if (curr->tid == tid) {
+
+    if(curr->tid == tid) {
       match = true;
     }
-
     curr_elem = list_next(curr_elem);
   }
+
   if(match) { 
     sema_down(&curr->child_semaphore);
+  
+    /* If the child process has failed to execute returns TID_ERROR */
     if(curr->has_faulted) {
       tid = TID_ERROR;
     }
   }
-  
   return tid;
 }
 
@@ -96,7 +99,7 @@ start_process (void *file_name_)
   arg_page = palloc_get_page (0);
   if(arg_page == NULL) {
     thread_current()->tid_elem->has_faulted = true;
-    /* Sema up to let parent continue at failure */
+    /* Sema up child_semaphore to let parent continue at failure */
     sema_up(&thread_current()->tid_elem->child_semaphore);
     thread_exit();
   }
@@ -119,7 +122,7 @@ start_process (void *file_name_)
     if(next_arg_location - arg_page > PGSIZE) {
       thread_current()->tid_elem->has_faulted = true;
 
-      /* Sema up to let parent continue at failure */
+      /* Sema up child_semaphore to let parent continue at failure */
       sema_up(&thread_current()->tid_elem->child_semaphore);
       thread_exit();
     }
@@ -138,7 +141,7 @@ start_process (void *file_name_)
   /* If load failed, quit. */
   palloc_free_page (file_name);
   
-  if (!success) {
+  if(!success) {
     thread_current()->tid_elem->has_faulted = true;
     /* Sema up to let parent continue at failure */
     sema_up(&thread_current()->tid_elem->child_semaphore);
@@ -186,7 +189,8 @@ start_process (void *file_name_)
 
   clean_arguments(&arg_list, arg_page);
 
-  /* If load is complete, sema_up to allow the parent to continue */
+  /* If load is complete, sema_up child_semaphore to allow the parent
+     to continue */
   sema_up(&thread_current()->tid_elem->child_semaphore);
 
   /* Start the user process by simulating a return from an
@@ -240,25 +244,30 @@ process_wait (tid_t child_tid)
   while(curr != list_end(&t->child_tid_list) && !match) {
     curr_elem = list_entry(curr, struct tid_elem, elem);
 
-    if (curr_elem->tid == child_tid) {
+    if(curr_elem->tid == child_tid) {
       match = true;
    }
-    
+
     curr = list_next(curr);
   }
 
-  if (match) {
-    if (!curr_elem->process_dead) {
+  /* If the child process is alive sema down child_semaphore and wait
+     for it to finish */
+  if(match) {
+    if(!curr_elem->process_dead) {
       sema_down(&curr_elem->child_semaphore);
     }
 
-    if (!curr_elem->process_dead) {
+    /* If after sema_down the child process is still not dead then there
+       occured an error */
+    if(!curr_elem->process_dead) {
       return -1;
     }
 
+    /* At this point the child process is dead and the parent can free its
+       tid_elem and remove it from their child_tid_list */
     int exit_status = curr_elem->exit_status;
     list_remove(&curr_elem->elem);
-    
     free(curr_elem);
     return exit_status;
     
@@ -278,7 +287,7 @@ process_exit (void)
   struct list_elem *current;
   struct file_elem *current_file;
   
-  while (!list_empty(&t->files)) {
+  while(!list_empty(&t->files)) {
     current = list_pop_front(&t->files);
     current_file = list_entry(current, struct file_elem, elem);
     file_close(current_file->file);
@@ -295,7 +304,7 @@ process_exit (void)
       char* token = strtok_r(name, " ", &name);
       printf("%s: exit(%d)\n", token, t->tid_elem->exit_status);
 
-      /* Free children's tid_elem if the child has terminated. */
+      /* Free children's tid_elem if the child has terminated */
       struct list_elem *child_elem = list_begin(&t->child_tid_list);
       struct tid_elem *child_tid_elem;
       
@@ -316,9 +325,7 @@ process_exit (void)
       }
       
       /* If parent process is dead then free shared tid_elem
-         otherwise sema_up for if the parent process is waiting.
-	 Need to do it at the end of process_exit to ensure
-	 parent process wakes up at the correct point. */
+         otherwise sema_up for if the parent process is waiting */
       lock_acquire(&t->tid_elem->tid_elem_lock);
       if(t->tid_elem->process_dead) {
         lock_release(&t->tid_elem->tid_elem_lock);
@@ -330,6 +337,7 @@ process_exit (void)
 	sema_up(&t->tid_elem->child_semaphore);
       }
 
+      /* Close processe's executable (will allow write) */
       file_close(t->executable);
 
       /* Correct ordering here is crucial.  We must set
@@ -457,6 +465,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
+
+  /* Save processe's executable file to executable and deny write to it */
   t->executable = file;
   file_deny_write(file);
 
@@ -542,8 +552,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   success = true;
 
  done:
-  /* We arrive here whether the load is successful or not. */
-  //file_close (file);
+  /* We arrive here whether the load is successful or not. */ 
   return success;
 }
 

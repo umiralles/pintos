@@ -91,13 +91,13 @@ static void syscall_exec(struct intr_frame *f) {
   const char *cmd_line = GET_ARGUMENT_VALUE(f, char *, 1);
 
   syscall_access_string(cmd_line);
-
   int child_tid = process_execute(cmd_line);
 
+  /* Returns -1 if child process failed to execute due to an error */
   if(child_tid == TID_ERROR) { 
     child_tid = -1;
   }
-  
+
   return_value_to_frame(f, (uint32_t) child_tid);
 }
 
@@ -106,6 +106,7 @@ static void syscall_exec(struct intr_frame *f) {
    Returns child's exit status */
 static void syscall_wait(struct intr_frame *f) {
   tid_t tid = GET_ARGUMENT_VALUE(f, tid_t, 1);
+  
   int res = process_wait(tid);
   
   return_value_to_frame(f, (uint32_t) res);
@@ -120,9 +121,9 @@ static void syscall_create(struct intr_frame *f) {
   bool res = false;
   
   if(check_filename(name)) {
-  lock_acquire(&filesys_lock);
-  res = filesys_create(name, (off_t) initial_size); 
-  lock_release(&filesys_lock);
+    lock_acquire(&filesys_lock);
+    res = filesys_create(name, (off_t) initial_size); 
+    lock_release(&filesys_lock);
   }
   
   return_value_to_frame(f, (uint32_t) res);
@@ -339,7 +340,6 @@ static void syscall_close(struct intr_frame *f) {
 }
 
 /* MEMORY ACCESS FUNCTION */
-
 /* Checks validity of any user supplied pointer
    A valid pointer is one that is in user space and on an allocated page */
 static void syscall_access_memory(const void *vaddr) {
