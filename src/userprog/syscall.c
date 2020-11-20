@@ -33,6 +33,7 @@ static void syscall_close(struct intr_frame *f);
 
 /* MEMORY ACCESS FUNCTION */
 static void syscall_access_memory(const void *vaddr);
+static void syscall_access_block(const void *block, unsigned size);
 static void syscall_access_string(const char *str);
 static bool check_filename(const char *name);
 
@@ -215,8 +216,7 @@ static void syscall_read(struct intr_frame *f) {
   int bytes_read = -1;
 
   /* Checks entire buffer is in valid user memory */
-  syscall_access_memory(buffer);
-  syscall_access_memory(buffer + size);
+  syscall_access_block(buffer, size);
 
   /* Reads from the keyboard instead of from a file */
   if(fd == STDIN_FILENO) {
@@ -255,8 +255,7 @@ static void syscall_write(struct intr_frame *f) {
   struct thread *t = thread_current();
 
   /* Checks entire buffer is in valid user memory */
-  syscall_access_memory(buffer);
-  syscall_access_memory(buffer + size);
+  syscall_access_block(buffer, size);
 
   if(fd == STDOUT_FILENO) {
     putbuf(buffer, size);
@@ -347,6 +346,20 @@ static void syscall_access_memory(const void *vaddr) {
   if(!(is_user_vaddr(vaddr) && pagedir_get_page(t->pagedir, vaddr))) {
     thread_exit();
   }
+}
+
+/* Checks validity of a user block of data of known size
+   Takes in the start of the block and its size
+   Checks start and end of buffer and every PGSIZE interval inbetween */
+static void syscall_access_block(const void *block, unsigned size) {
+  const void *curr = block;
+  
+  for(int i = 0; i < size; i+= PGSIZE) {
+    curr = block + i;
+    syscall_access_memory(curr);
+  }
+
+  syscall_access_memory(block + size);
 }
 
 /* Checks validity and length of a filename */
