@@ -411,6 +411,8 @@ static struct file_elem* get_file(struct thread *t, int fd) {
     current = list_entry(e, struct file_elem, elem);
     if(current->fd == fd) {
       return current;
+    } else if(current->fd > fd) {
+      return NULL;
     }
   }
 
