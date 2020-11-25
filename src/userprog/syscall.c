@@ -354,7 +354,7 @@ static void syscall_access_memory(const void *vaddr) {
 static void syscall_access_block(const void *block, unsigned size) {
   const void *curr = block;
   
-  for(int i = 0; i < size; i+= PGSIZE) {
+  for(unsigned i = 0; i < size; i+= PGSIZE) {
     curr = block + i;
     syscall_access_memory(curr);
   }

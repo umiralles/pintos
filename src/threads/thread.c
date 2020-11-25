@@ -117,8 +117,6 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
   initial_thread->nice = 0;                 /* Initially 0 niceness */
   initial_thread->recent_cpu = 0;           /* Initially 0 CPU useage */
-
-  hash_init (&frame_table, hash_user_address, cmp_timestamp, NULL);
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
