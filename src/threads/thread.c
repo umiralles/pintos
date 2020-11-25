@@ -12,6 +12,7 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
+#include "vm/frame.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -105,6 +106,8 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+
+  hash_init (&frame_table, hash_user_address, cmp_timestamp, NULL);
 
   /* Initialises load_avg to 0 (no work has been done) */
   load_avg = 0;
