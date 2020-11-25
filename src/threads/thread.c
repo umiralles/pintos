@@ -107,8 +107,6 @@ thread_init (void)
   list_init (&ready_list);
   list_init (&all_list);
 
-  hash_init (&frame_table, hash_user_address, cmp_timestamp, NULL);
-
   /* Initialises load_avg to 0 (no work has been done) */
   load_avg = 0;
 
@@ -119,6 +117,8 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
   initial_thread->nice = 0;                 /* Initially 0 niceness */
   initial_thread->recent_cpu = 0;           /* Initially 0 CPU useage */
+
+  hash_init (&frame_table, hash_user_address, cmp_timestamp, NULL);
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
