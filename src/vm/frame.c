@@ -22,3 +22,11 @@ bool cmp_timestamp(const struct hash_elem *a, const struct hash_elem *b,
 
   return ft1->timestamp < ft2->timestamp;
 }
+
+struct frame_table_elem *find_ft_elem(void *uaddr) {
+  struct frame_table_elem key;
+  
+  key.uaddr = uaddr;
+  return hash_entry(hash_find(&frame_table, &key.elem),
+		    struct frame_table_elem, elem);
+}

@@ -10,12 +10,15 @@ extern struct hash frame_table;
 struct frame_table_elem {
   void *uaddr;           /* user virtual address frame represents */
   void *frame;           /* frame of memory that the data corresponds to */
+  struct thread *owner;  /* thread which the page belongs to */
   int64_t timestamp;     /* time the frame was allocated in ticks */
   struct hash_elem elem; /* used to insert into the table */
-  struct list_elem delete_elem; /* TODO: find a better way of freeing these */
   bool reference_bit;    /* used for second chance algorithm calculations */
   bool modified;         /* states whether the frame has been modified */
+  bool writable;         /* whether the thread can be written to or not */
 };
+
+struct frame_table_elem *find_ft_elem(void *uaddr);
 
 hash_hash_func hash_user_address;
 hash_less_func cmp_timestamp;

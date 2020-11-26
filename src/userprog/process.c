@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <hash.h>
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/process.h"
@@ -19,6 +20,8 @@
 #include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
+#include "vm/frame.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -707,6 +710,17 @@ install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();
 
+  struct frame_table_elem *ft = malloc(sizeof(struct frame_table_elem));
+  ft->frame = kpage;
+  ft->uaddr = upage;
+  ft->owner = t;
+  ft->timestamp = timer_ticks();
+  ft->reference_bit = 0;
+  ft->modified = 0;
+  ft->writable = writable;
+  
+  hash_insert(&frame_table, &ft->elem);
+  
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL

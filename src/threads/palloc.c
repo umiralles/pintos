@@ -93,19 +93,6 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt)
   if (pages != NULL) 
     {
       if (flags & PAL_ZERO) {
-	struct frame_table_elem *ft;
-	
-	for (unsigned i = 0; i < page_cnt; i++) {
-	  ft = malloc(sizeof(struct frame_table_elem));
-	  ft->frame = pages + i * PGSIZE;
-	  ft->uaddr = ft->frame;
-	  ft->timestamp = timer_ticks();
-	  ft->reference_bit = 0;
-	  ft->modified = 0;
-
-	  hash_insert(&frame_table, &ft->elem);
-	}
-	
         memset (pages, 0, PGSIZE * page_cnt);
       }
     }
@@ -155,36 +142,8 @@ palloc_free_multiple (void *pages, size_t page_cnt)
   memset (pages, 0xcc, PGSIZE * page_cnt);
 #endif
 
-
-  /* frees frame table entries related to the pages being freed */
-  remove_frame_table_entries(pages, page_cnt);
-
   ASSERT (bitmap_all (pool->used_map, page_idx, page_cnt));
   bitmap_set_multiple (pool->used_map, page_idx, page_cnt, false);
-}
-
-static void remove_frame_table_entries(void *pages, size_t page_cnt) {
-  struct hash_iterator iterator;
-  hash_first(&iterator, &frame_table);
-
-  struct frame_table_elem *ft;
-  struct list entries_to_delete;
-  list_init(&entries_to_delete);
-  
-  while(hash_next(&iterator)) {
-    ft = hash_entry (hash_cur(&iterator), struct frame_table_elem, elem);
-    if(ft->uaddr > pages && ft->uaddr < pages + PGSIZE * page_cnt) {
-      list_push_back(&entries_to_delete, &ft->delete_elem);
-    }
-  }
-
-  struct list_elem *e = list_begin(&entries_to_delete);
-  while(e != list_end(&entries_to_delete)) {
-    ft = list_entry(e, struct frame_table_elem, delete_elem);
-    hash_delete(&frame_table, &ft->elem);
-    e = list_next(e);
-    free(ft);
-  }
 }
 
 /* Frees the page at PAGE. */
