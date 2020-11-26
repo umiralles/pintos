@@ -10,7 +10,7 @@
 
 static uint32_t *active_pd (void);
 static void invalidate_pagedir (uint32_t *);
-static void remove_frame_table_entries(void *uaddr, size_t page_cnt);
+static void remove_frame_table_entry(void *uaddr);
 
 /* Creates a new page directory that has mappings for kernel
    virtual addresses, but none for user virtual addresses.
@@ -159,18 +159,15 @@ pagedir_clear_page (uint32_t *pd, void *upage)
     }
 
   /* frees frame table entries related to the pages being freed */
-  remove_frame_table_entries(upage, 1);
+  remove_frame_table_entry(upage);
 }
 
-static void remove_frame_table_entries(void *pages, size_t page_cnt) {
+static void remove_frame_table_entry(void *uaddr) {
   struct frame_table_elem *val;
-  
-  for (unsigned i = 0; i < page_cnt; i++) {
-    val = find_ft_elem(pages + i * PGSIZE);
+  val = find_ft_elem(uaddr);
 
-    hash_delete(&frame_table, &val->elem);
-    free(val);
-  }
+  hash_delete(&frame_table, &val->elem);
+  free(val);
 }
 
 /* Returns true if the PTE for virtual page VPAGE in PD is dirty,

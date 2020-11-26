@@ -23,6 +23,7 @@ bool cmp_timestamp(const struct hash_elem *a, const struct hash_elem *b,
   return ft1->timestamp < ft2->timestamp;
 }
 
+/* Gets a frame table entry from its hash table with a matching user address */
 struct frame_table_elem *find_ft_elem(void *uaddr) {
   struct frame_table_elem key;
   
