@@ -245,6 +245,12 @@ thread_create (const char *name, int priority,
   /* Initialise thread for userprog system */
 #ifdef USERPROG
   t->tid_elem = malloc(sizeof(struct tid_elem));
+
+  if(t->tid_elem == NULL) {
+    free(t);
+    return TID_ERROR;
+  }
+  
   t->tid_elem->tid = tid;
   t->tid_elem->exit_status = -1;
   t->tid_elem->process_dead = false;

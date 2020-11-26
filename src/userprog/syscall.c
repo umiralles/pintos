@@ -63,6 +63,11 @@ void syscall_init(void) {
 static void syscall_handler(struct intr_frame *f) {
   syscall_access_memory(f->esp);
   int32_t call_no = *((int32_t *) f->esp);
+
+  if(call_no >= MAX_SYSCALLS || call_no < 0) {
+    thread_exit();
+  }
+  
   syscalls[call_no](f);
 }
 
@@ -354,7 +359,7 @@ static void syscall_access_memory(const void *vaddr) {
 static void syscall_access_block(const void *block, unsigned size) {
   const void *curr = block;
   
-  for(int i = 0; i < size; i+= PGSIZE) {
+  for(int i = 0; i < (int) size; i += PGSIZE) {
     curr = block + i;
     syscall_access_memory(curr);
   }
@@ -431,4 +436,12 @@ static struct file_elem* get_file(struct thread *t, int fd) {
 
   /* Nothing found */
   return NULL; 
+}
+
+void filesys_lock_acquire(void) {
+  lock_acquire(&filesys_lock);
+}
+
+void filesys_lock_release(void) {
+  lock_release(&filesys_lock);
 }

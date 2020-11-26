@@ -99,6 +99,7 @@ start_process (void *file_name_)
   arg_page = palloc_get_page (0);
   if(arg_page == NULL) {
     thread_current()->tid_elem->has_faulted = true;
+    
     /* Sema up child_semaphore to let parent continue at failure */
     sema_up(&thread_current()->tid_elem->child_semaphore);
     thread_exit();
@@ -112,6 +113,16 @@ start_process (void *file_name_)
   for(token = strtok_r (file_name, " ", &save_ptr); token != NULL;
       token = strtok_r (NULL, " ", &save_ptr)) {
     current_arg = malloc(sizeof(struct argument));
+
+    if(current_arg == NULL) {
+      thread_current()->tid_elem->has_faulted = true;
+
+      /* Sema up child_semaphore to let parent continue at failure */
+      sema_up(&thread_current()->tid_elem->child_semaphore);
+      
+      clean_arguments(&arg_list, arg_page);
+      thread_exit();
+    }
         
     current_arg->arg = next_arg_location;    
     strlcpy(current_arg->arg, token, PGSIZE);
@@ -119,13 +130,6 @@ start_process (void *file_name_)
     list_push_back(&arg_list, &current_arg->arg_elem);
     
     next_arg_location += strlen(token) + 1;
-    if(next_arg_location - arg_page > PGSIZE) {
-      thread_current()->tid_elem->has_faulted = true;
-
-      /* Sema up child_semaphore to let parent continue at failure */
-      sema_up(&thread_current()->tid_elem->child_semaphore);
-      thread_exit();
-    }
   }
 
   char *arg1 = list_entry(list_begin(&arg_list), struct argument,
@@ -143,9 +147,10 @@ start_process (void *file_name_)
   
   if(!success) {
     thread_current()->tid_elem->has_faulted = true;
+    
     /* Sema up to let parent continue at failure */
     sema_up(&thread_current()->tid_elem->child_semaphore);
-
+    
     clean_arguments(&arg_list, arg_page);
     thread_exit ();
   }
@@ -254,10 +259,8 @@ process_wait (tid_t child_tid)
   /* If the child process is alive sema down child_semaphore and wait
      for it to finish */
   if(match) {
-    if(!curr_elem->process_dead) {
-      sema_down(&curr_elem->child_semaphore);
-      lock_acquire(&curr_elem->tid_elem_lock);
-    }
+    sema_down(&curr_elem->child_semaphore);
+    lock_acquire(&curr_elem->tid_elem_lock);
 
     /* If after sema_down the child process is still not dead then there
        occured an error */
@@ -457,10 +460,14 @@ load (const char *file_name, void (**eip) (void), void **esp)
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
     goto done;
+  
   process_activate ();
 
   /* Open executable file. */
+  filesys_lock_acquire();
   file = filesys_open (file_name);
+  filesys_lock_release();
+    
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
@@ -469,7 +476,9 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Save processe's executable file to executable and deny write to it */
   t->executable = file;
+  filesys_lock_acquire();
   file_deny_write(file);
+  filesys_lock_release();
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr

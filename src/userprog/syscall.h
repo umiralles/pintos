@@ -25,4 +25,8 @@ struct file_elem {
 
 void syscall_init (void);
 
+/* Used to access the files lock outside of syscall */
+void filesys_lock_acquire(void);
+void filesys_lock_release(void);
+
 #endif /* userprog/syscall.h */
