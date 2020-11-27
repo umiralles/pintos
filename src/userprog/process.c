@@ -22,6 +22,8 @@
 #include "threads/vaddr.h"
 #include "devices/timer.h"
 #include "vm/frame.h"
+#include "vm/page.h"
+#include "vm/swap.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -647,7 +649,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       if (kpage == NULL){
         
         /* Get a new page of memory. */
-        kpage = allocate_user_page(upage, 0, writable);
+        // put file into spt	      
+      	kpage = allocate_user_page(upage, 0, writable);
 
 	if (kpage == NULL) {
 	  return false;
@@ -731,9 +734,30 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     ft->reference_bit = 0;
     ft->modified = 0;
     ft->writable = writable;
-  
+
     hash_insert(&frame_table, &ft->elem);
   }
 
   return kpage;
+}
+
+void get_user_page(void *upage, bool fromFile, bool writable) {
+  struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));
+  if(fromFile) {
+    // get filesys_lock, open file get location release lock
+  
+  //if(filesys_create()) {
+    // filesys_open();
+    //  }
+  } else {
+    spt->location.block_number = find_swap_space(1);
+  }
+  
+  spt->upage = upage;
+  spt->owner = thread_current();
+  spt->fromFile = fromFile;
+  spt->empty = true;
+  spt->writable = writable;
+
+  //hash_insert(&sup_table, &spt->elem);
 }
