@@ -342,11 +342,12 @@ static void syscall_close(struct intr_frame *f) {
 /* Checks validity of any user supplied pointer
    A valid pointer is one that is in user space and on an allocated page */
 static void syscall_access_memory(const void *vaddr) {
-  struct thread *t = thread_current();
-  if(!(is_user_vaddr(vaddr) && pagedir_get_page(t->pagedir, vaddr))) {
+
+  if(!(is_user_vaddr(vaddr))) {
     thread_exit();
   }
 }
+
 
 /* Checks validity of a user block of data of known size
    Takes in the start of the block and its size
