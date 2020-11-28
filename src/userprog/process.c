@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <hash.h>
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/process.h"
@@ -19,6 +20,10 @@
 #include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
+#include "vm/frame.h"
+#include "vm/page.h"
+#include "vm/swap.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -653,17 +658,12 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       if (kpage == NULL){
         
         /* Get a new page of memory. */
-        kpage = palloc_get_page (PAL_USER);
-        if (kpage == NULL){
-          return false;
-        }
-        
-        /* Add the page to the process's address space. */
-        if (!install_page (upage, kpage, writable)) 
-        {
-          palloc_free_page (kpage);
-          return false; 
-        }        
+        // put file into spt	      
+      	kpage = allocate_user_page(upage, 0, writable);
+
+	if (kpage == NULL) {
+	  return false;
+	}
       }
 
       /* Load data into the page. */
@@ -687,19 +687,16 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp) 
 {
-  uint8_t *kpage;
-  bool success = false;
+  uint8_t *kpage = allocate_user_page(((uint8_t *) PHYS_BASE) - PGSIZE,
+				      PAL_ZERO, true);
 
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
-  if (kpage != NULL) 
-    {
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success)
-        *esp = PHYS_BASE;
-      else
-        palloc_free_page (kpage);
-    }
-  return success;
+  if (kpage == NULL) {
+    return false;
+  }
+
+  *esp = PHYS_BASE;
+  
+  return true;
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel
@@ -715,9 +712,61 @@ static bool
 install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();
-
+  
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+/* allocates a user page and installs it into the frame table 
+   takes a user address to allocate space for, extra palloc flags and whether
+   the file is writable or not */
+void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
+  void *kpage = palloc_get_page(PAL_USER | flags);
+  struct thread *t = thread_current();
+
+  //TODO: add eviction in null case
+  if (kpage != NULL) {
+    bool success = install_page(uaddr, kpage, writable);
+
+    if (!success) {
+      palloc_free_page(kpage);
+      return NULL;
+    }
+    
+    struct frame_table_elem *ft = malloc(sizeof(struct frame_table_elem));
+    ft->frame = kpage;
+    ft->uaddr = uaddr;
+    ft->owner = t;
+    ft->timestamp = timer_ticks();
+    ft->reference_bit = 0;
+    ft->modified = 0;
+    ft->writable = writable;
+
+    hash_insert(&frame_table, &ft->elem);
+  }
+
+  return kpage;
+}
+
+void get_user_page(void *upage, bool fromFile, bool writable) {
+  struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));
+  if(fromFile) {
+    // get filesys_lock, open file get location release lock
+  
+  //if(filesys_create()) {
+    // filesys_open();
+    //  }
+  } else {
+    spt->location.block_number = find_swap_space(1);
+  }
+  
+  spt->upage = upage;
+  spt->owner = thread_current();
+  spt->fromFile = fromFile;
+  spt->empty = true;
+  spt->writable = writable;
+
+  //hash_insert(&sup_table, &spt->elem);
 }

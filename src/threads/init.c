@@ -1,4 +1,5 @@
 #include "threads/init.h"
+#include <bitmap.h>
 #include <console.h>
 #include <debug.h>
 #include <inttypes.h>
@@ -8,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <hash.h>
 #include "devices/kbd.h"
 #include "devices/input.h"
 #include "devices/serial.h"
@@ -22,6 +24,8 @@
 #include "threads/palloc.h"
 #include "threads/pte.h"
 #include "threads/thread.h"
+#include "vm/frame.h"
+#include "vm/swap.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #include "userprog/exception.h"
@@ -161,6 +165,8 @@ paging_init (void)
   size_t page;
   extern char _start, _end_kernel_text;
 
+  hash_init (&frame_table, hash_user_address, cmp_timestamp, NULL);
+  
   pd = init_page_dir = palloc_get_page (PAL_ASSERT | PAL_ZERO);
   pt = NULL;
   for (page = 0; page < init_ram_pages; page++)
@@ -180,7 +186,7 @@ paging_init (void)
       pt[pte_idx] = pte_create_kernel (vaddr, !in_kernel_text);
     }
 
-  /* Store the physical address of the page directory into CR3
+   /* Store the physical address of the page directory into CR3
      aka PDBR (page directory base register).  This activates our
      new page tables immediately.  See [IA32-v2a] "MOV--Move
      to/from Control Registers" and [IA32-v3a] 3.7.5 "Base Address
@@ -395,6 +401,8 @@ locate_block_devices (void)
   locate_block_device (BLOCK_SCRATCH, scratch_bdev_name);
 #ifdef VM
   locate_block_device (BLOCK_SWAP, swap_bdev_name);
+  swap_table = bitmap_create(block_size(
+			  block_get_role(BLOCK_SWAP)) / BLOCK_SECTOR_SIZE);
 #endif
 }
 
