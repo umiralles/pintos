@@ -29,6 +29,8 @@ static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 static void push_word_to_stack(struct intr_frame *if_, int32_t val);
 static void clean_arguments(struct list *arg_list, void *arg_page);
+static void set_spt_values(struct sup_table_entry *spt, void *upage,
+			   bool writable);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -728,7 +730,7 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     
     struct frame_table_elem *ft = malloc(sizeof(struct frame_table_elem));
     ft->frame = kpage;
-    ft->uaddr = uaddr;
+    ft->uaddr = pg_round_down(uaddr);
     ft->owner = t;
     ft->timestamp = timer_ticks();
     ft->reference_bit = 0;
@@ -741,23 +743,29 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
   return kpage;
 }
 
-void get_user_page(void *upage, bool fromFile, bool writable) {
-  struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));
-  if(fromFile) {
-    // get filesys_lock, open file get location release lock
-  
-  //if(filesys_create()) {
-    // filesys_open();
-    //  }
-  } else {
-    spt->location.block_number = find_swap_space(1);
-  }
-  
-  spt->upage = upage;
-  spt->owner = thread_current();
-  spt->fromFile = fromFile;
+static void set_spt_values(struct sup_table_entry *spt, void *upage,
+			   bool writable) {
+  spt->upage = pg_round_down(upage);
   spt->empty = true;
   spt->writable = writable;
 
+  hash_insert(&thread_current()->sup_table, &spt->elem);
+}
+
+void get_upage_swap(void *upage) {
+  struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));
+
+  spt->location.block_number = find_swap_space(1);
+
+  set_spt_values(spt, upage, true);
   //hash_insert(&sup_table, &spt->elem);
+}
+
+void get_upage_file(void *upage, struct file *file, off_t offset) {
+  struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));
+
+  spt->location.file.file = file;
+  spt->location.file.offset = offset;
+
+  set_spt_values(spt, upage, false);
 }

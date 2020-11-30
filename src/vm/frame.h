@@ -19,6 +19,7 @@ struct frame_table_elem {
 };
 
 struct frame_table_elem *find_ft_elem(void *uaddr);
+void remove_ft_elem(void *uaddr);
 
 hash_hash_func hash_user_address;
 hash_less_func cmp_timestamp;

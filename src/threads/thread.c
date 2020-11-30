@@ -13,6 +13,7 @@
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
 #include "vm/frame.h"
+#include "vm/page.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -634,6 +635,7 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&t->files);
   t->next_available_fd = STDOUT_FILENO + 1;
   list_init(&t->child_tid_list);
+  hash_init(&t->sup_table, sup_table_hash_uaddr, sup_table_cmp_uaddr, NULL);
 #endif
 
   t->magic = THREAD_MAGIC;

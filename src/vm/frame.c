@@ -2,6 +2,7 @@
 #include <debug.h>
 
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 
 /* frame table */
 struct hash frame_table;
@@ -26,8 +27,20 @@ bool cmp_timestamp(const struct hash_elem *a, const struct hash_elem *b,
 /* Gets a frame table entry from its hash table with a matching user address */
 struct frame_table_elem *find_ft_elem(void *uaddr) {
   struct frame_table_elem key;
+  key.uaddr = pg_round_down(uaddr);
+
+  struct hash_elem *elem = hash_find(&frame_table, &key.elem);
+
+  if (elem == NULL) {
+    return NULL;
+  }
   
-  key.uaddr = uaddr;
-  return hash_entry(hash_find(&frame_table, &key.elem),
-		    struct frame_table_elem, elem);
+  return hash_entry(elem, struct frame_table_elem, elem);
+}
+
+void remove_ft_elem(void *uaddr) {
+  struct frame_table_elem *ft = find_ft_elem(uaddr);
+
+  hash_delete(&frame_table, &ft->elem);
+  free(ft);
 }

@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include <hash.h>
 #include "synch.h"
 #include "threads/fixed-point.h"
 
@@ -134,6 +135,7 @@ struct thread
     struct tid_elem *tid_elem;          /* Pointer to this thread's
 					   tid_elem in its parent's
 					   child_tid_list */
+    struct hash sup_table;              /* Supplemental page table */
 #endif
 
     /* Owned by thread.c. */
