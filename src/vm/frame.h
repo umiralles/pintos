@@ -2,9 +2,13 @@
 #define VM_FRAME
 
 #include <hash.h>
+#include "threads/synch.h"
 
 /* frame table */
 extern struct hash frame_table;
+
+/* lock for frame table */
+extern struct lock frame_table_lock;
 
 /* single row of the frame table */
 struct frame_table_elem {

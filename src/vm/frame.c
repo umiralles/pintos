@@ -7,6 +7,7 @@
 
 /* frame table */
 struct hash frame_table;
+struct lock frame_table_lock;
 
 /* Generates a hash function from the user virtual address of a page 
    hash function is address divided by page size which acts as a page number */
@@ -42,8 +43,8 @@ struct frame_table_elem *find_ft_elem(void *uaddr) {
 void remove_ft_elem(void *uaddr) {
   struct frame_table_elem *ft = find_ft_elem(uaddr);
 
-  palloc_free_page(ft->frame);
-  
-  hash_delete(&frame_table, &ft->elem);
-  free(ft);
+  if (ft != NULL) {
+    hash_delete(&frame_table, &ft->elem);
+    free(ft);
+  }
 }

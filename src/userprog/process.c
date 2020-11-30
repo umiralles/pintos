@@ -739,7 +739,9 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     ft->modified = 0;
     ft->writable = writable;
 
+    lock_acquire(&frame_table_lock);
     hash_insert(&frame_table, &ft->elem);
+    lock_release(&frame_table_lock);
   }
 
   return kpage;

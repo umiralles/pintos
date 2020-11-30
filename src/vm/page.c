@@ -39,12 +39,14 @@ struct sup_table_entry *find_spt_entry(void *uaddr) {
 void remove_spt_entry(void *uaddr) {
   struct sup_table_entry *spt = find_spt_entry(uaddr);
 
-  if (!spt->empty) {
-    remove_swap_space(spt->location.block_number, 1);
+  if (spt != NULL) {
+    if (!spt->empty) {
+      remove_swap_space(spt->location.block_number, 1);
+    }
+    
+    hash_delete(&thread_current()->sup_table, &spt->elem);
+    free(spt);
   }
-
-  hash_delete(&thread_current()->sup_table, &spt->elem);
-  free(spt);
 }
 
 void destroy_spt_entry(struct hash_elem *e, void *aux UNUSED) {
