@@ -3,6 +3,7 @@
 #include <bitmap.h>
 #include <stddef.h>
 
+/* Swap table */
 extern struct bitmap *swap_table;
 
 size_t find_swap_space(size_t cnt);

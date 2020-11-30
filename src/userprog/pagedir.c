@@ -159,7 +159,7 @@ pagedir_clear_page (uint32_t *pd, void *upage)
 
   /* frees frame table entries related to the pages being freed */
   lock_acquire(&frame_table_lock);
-  remove_ft_elem(upage);
+  remove_ft_entry(upage);
   lock_release(&frame_table_lock);
 }
 

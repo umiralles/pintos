@@ -714,23 +714,24 @@ install_page (void *upage, void *kpage, bool writable)
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
 
-/* allocates a user page and installs it into the frame table 
+/* Allocates a user page and installs it into the frame table 
    takes a user address to allocate space for, extra palloc flags and whether
-   the file is writable or not */
+   the file is writable or not 
+   Returns the address of the frame allocated or null if out of pages */
 void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
   void *kpage = palloc_get_page(PAL_USER | flags);
   struct thread *t = thread_current();
 
-  //TODO: add eviction in null case
   if (kpage != NULL) {
     bool success = install_page(uaddr, kpage, writable);
-
+    
+    //TODO: add eviction in null case
     if (!success) {
       palloc_free_page(kpage);
       return NULL;
     }
     
-    struct frame_table_elem *ft = malloc(sizeof(struct frame_table_elem));
+    struct frame_table_entry *ft = malloc(sizeof(struct frame_table_entry));
     ft->frame = kpage;
     ft->uaddr = pg_round_down(uaddr);
     ft->owner = t;
@@ -747,6 +748,9 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
   return kpage;
 }
 
+/* Sets the values of a supplemental page table entry
+   not set by one of the get methods
+   Takes a user page pointer and a read only bool */
 static void set_spt_values(struct sup_table_entry *spt, void *upage,
 			   bool writable) {
   spt->upage = pg_round_down(upage);
@@ -756,6 +760,9 @@ static void set_spt_values(struct sup_table_entry *spt, void *upage,
   hash_insert(&thread_current()->sup_table, &spt->elem);
 }
 
+/* Gets a user page to be written to swap space on eviction
+   These pages should be stack pages or writable memory mapped files
+   Takes the user virtual address */
 void get_upage_swap(void *upage) {
   struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));
 
@@ -765,6 +772,9 @@ void get_upage_swap(void *upage) {
   //hash_insert(&sup_table, &spt->elem);
 }
 
+/* Gets a user page to be discarded on eviction, with data in a file
+   These pages should be read only files
+   Takes a user virtual address, file and offset of the page data in the file */
 void get_upage_file(void *upage, struct file *file, off_t offset) {
   struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));
 
