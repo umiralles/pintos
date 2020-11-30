@@ -24,6 +24,7 @@ struct sup_table_entry {
 
 hash_hash_func sup_table_hash_uaddr;
 hash_less_func sup_table_cmp_uaddr;
+hash_action_func destroy_spt_entry;
 
 
 struct sup_table_entry *find_spt_entry(void *uaddr);

@@ -3,6 +3,7 @@
 #include "threads/vaddr.h"
 #include "threads/thread.h"
 #include "threads/malloc.h"
+#include "vm/frame.h"
 #include "vm/swap.h"
 
 struct hash sup_table;
@@ -40,6 +41,23 @@ void remove_spt_entry(void *uaddr) {
 
   if (!spt->empty) {
     remove_swap_space(spt->location.block_number, 1);
+  }
+
+  hash_delete(&thread_current()->sup_table, &spt->elem);
+  free(spt);
+}
+
+void destroy_spt_entry(struct hash_elem *e, void *aux UNUSED) {
+  struct sup_table_entry *spt = hash_entry(e, struct sup_table_entry, elem);
+
+  if (!spt->empty) {
+    remove_swap_space(spt->location.block_number, 1);
+  }
+
+  /* removes frame table entry of the page if it is in physical memory */
+  struct frame_table_elem *ft = find_ft_elem(spt->upage);
+  if (ft != NULL) {
+    remove_ft_elem(spt->upage);
   }
 
   free(spt);

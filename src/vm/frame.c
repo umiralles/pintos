@@ -3,6 +3,7 @@
 
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
+#include "threads/palloc.h"
 
 /* frame table */
 struct hash frame_table;
@@ -41,6 +42,8 @@ struct frame_table_elem *find_ft_elem(void *uaddr) {
 void remove_ft_elem(void *uaddr) {
   struct frame_table_elem *ft = find_ft_elem(uaddr);
 
+  palloc_free_page(ft->frame);
+  
   hash_delete(&frame_table, &ft->elem);
   free(ft);
 }
