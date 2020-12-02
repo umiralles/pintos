@@ -2,12 +2,16 @@
 #define VM_FRAME
 
 #include <hash.h>
+#include "threads/synch.h"
 
-/* frame table */
+/* Frame table */
 extern struct hash frame_table;
 
-/* single row of the frame table */
-struct frame_table_elem {
+/* Lock for frame table */
+extern struct lock frame_table_lock;
+
+/* Single row of the frame table */
+struct frame_table_entry {
   void *uaddr;           /* user virtual address frame represents */
   void *frame;           /* frame of memory that the data corresponds to */
   struct thread *owner;  /* thread which the page belongs to */
@@ -18,8 +22,10 @@ struct frame_table_elem {
   bool writable;         /* whether the thread can be written to or not */
 };
 
-struct frame_table_elem *find_ft_elem(void *uaddr);
+struct frame_table_entry *find_ft_entry(void *uaddr);
+void remove_ft_entry(void *uaddr);
 
+/* Hash functions */
 hash_hash_func hash_user_address;
 hash_less_func cmp_timestamp;
 

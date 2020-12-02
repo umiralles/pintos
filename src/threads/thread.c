@@ -13,6 +13,7 @@
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
 #include "vm/frame.h"
+#include "vm/page.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -259,6 +260,7 @@ thread_create (const char *name, int priority,
   sema_init(&t->tid_elem->child_semaphore, 0);
   lock_init(&t->tid_elem->tid_elem_lock);
   list_push_back(&thread_current()->child_tid_list, &t->tid_elem->elem);
+  hash_init(&t->sup_table, sup_table_hash_uaddr, sup_table_cmp_uaddr, NULL);
 #endif
 
   /* Initialise thread for mlfqs scheduling */
