@@ -29,8 +29,6 @@ static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 static void push_word_to_stack(struct intr_frame *if_, int32_t val);
 static void clean_arguments(struct list *arg_list, void *arg_page);
-static void set_spt_values(struct sup_table_entry *spt, void *upage,
-			   bool writable);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -662,7 +660,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       if (kpage == NULL){
         
         /* Get a new page of memory. */
-        // put file into spt	      
+        // put file into spt	
+        create_file_page(upage, file, ofs, writable);      
       	kpage = allocate_user_page(upage, 0, writable);
 
 	if (kpage == NULL) {
@@ -691,6 +690,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp) 
 {
+  void *upage = PHYS_BASE - PGSIZE;
+  create_stack_page(upage);
   uint8_t *kpage = allocate_user_page(((uint8_t *) PHYS_BASE) - PGSIZE,
 				      PAL_ZERO, true);
 
@@ -749,6 +750,14 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     ft->modified = 0;
     ft->writable = writable;
 
+    struct sup_table_entry *spt = find_spt_entry(t, uaddr);
+
+    /* if something goes horribly wrong */
+    if (spt == NULL) {
+      thread_exit();
+    }
+    //copy_to_frame(ft, spt);
+
     lock_acquire(&frame_table_lock);
     hash_insert(&frame_table, &ft->elem);
     lock_release(&frame_table_lock);
@@ -757,38 +766,33 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
   return kpage;
 }
 
-/* Sets the values of a supplemental page table entry
-   not set by one of the get methods
-   Takes a user page pointer and a read only bool */
-static void set_spt_values(struct sup_table_entry *spt, void *upage,
-			   bool writable) {
+/* Gets a user page to be written to swap space on eviction
+   Creates sup_table_entry for it
+   Takes user page pointer, file pointer, offset within file
+   and whether file is writable */
+void create_file_page(void *upage, struct file *file, off_t offset,
+		      bool writable) {
+//SHOULD BE FREED ON EXIT		      
+  struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));
+  spt->file = file;
+  spt->offset = offset;
   spt->upage = pg_round_down(upage);
-  spt->empty = true;
   spt->writable = writable;
+  spt->empty = false;
+  spt->in_swap = false;
 
   hash_insert(&thread_current()->sup_table, &spt->elem);
 }
 
-/* Gets a user page to be written to swap space on eviction
-   These pages should be stack pages or writable memory mapped files
-   Takes the user virtual address */
-void get_upage_swap(void *upage) {
+void create_stack_page(void *upage) {
+//SHOULD BE FREED ON EXIT
   struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));
+  spt->file = NULL;
+  spt->offset = 0;
+  spt->upage = pg_round_down(upage);
+  spt->writable = true;
+  spt->empty = true;
+  spt->in_swap = true;
 
-  spt->location.block_number = find_swap_space(1);
-
-  set_spt_values(spt, upage, true);
-  //hash_insert(&sup_table, &spt->elem);
-}
-
-/* Gets a user page to be discarded on eviction, with data in a file
-   These pages should be read only files
-   Takes a user virtual address, file and offset of the page data in the file */
-void get_upage_file(void *upage, struct file *file, off_t offset) {
-  struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));
-
-  spt->location.file.file = file;
-  spt->location.file.offset = offset;
-
-  set_spt_values(spt, upage, false);
+  hash_insert(&thread_current()->sup_table, &spt->elem);
 }

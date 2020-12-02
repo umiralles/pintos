@@ -11,7 +11,9 @@ void process_exit (void);
 void process_activate (void);
 void *allocate_user_page (void* uaddr, enum palloc_flags flags,
 		bool writable);
-void get_upage_swap(void *upage);
-void get_upage_file(void *upage, struct file *file, off_t offset);
+void create_file_page(void *upage, struct file *file, off_t offset,
+		bool writable);
+void create_stack_page(void *upage);
+
 
 #endif /* userprog/process.h */
