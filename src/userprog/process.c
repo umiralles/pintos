@@ -732,11 +732,11 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
   void *kpage = palloc_get_page(PAL_USER | flags);
   struct thread *t = thread_current();
 
-  if (kpage != NULL) {
+  if(kpage != NULL) {
     bool success = install_page(uaddr, kpage, writable);
     
     //TODO: add eviction in null case
-    if (!success) {
+    if(!success) {
       palloc_free_page(kpage);
       return NULL;
     }
@@ -752,8 +752,8 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
 
     struct sup_table_entry *spt = find_spt_entry(t, uaddr);
 
-    /* if something goes horribly wrong */
-    if (spt == NULL) {
+    /* If something goes horribly wrong */
+    if(spt == NULL) {
       thread_exit();
     }
     //copy_to_frame(ft, spt);
@@ -772,8 +772,12 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
    and whether file is writable */
 void create_file_page(void *upage, struct file *file, off_t offset,
 		      bool writable) {
-//SHOULD BE FREED ON EXIT		      
-  struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));
+//TODO: FREE ON EXIT		      
+  struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));  
+  if(spt == NULL) {
+    thread_exit();
+  }
+  
   spt->file = file;
   spt->offset = offset;
   spt->upage = pg_round_down(upage);
@@ -785,8 +789,12 @@ void create_file_page(void *upage, struct file *file, off_t offset,
 }
 
 void create_stack_page(void *upage) {
-//SHOULD BE FREED ON EXIT
-  struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));
+//TODO: FREE ON EXIT
+  struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));  
+  if(spt == NULL) {
+    thread_exit();
+  }
+  
   spt->file = NULL;
   spt->offset = 0;
   spt->upage = pg_round_down(upage);
