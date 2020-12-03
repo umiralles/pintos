@@ -736,10 +736,15 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     //TODO: add eviction in null case
     if(!success) {
       palloc_free_page(kpage);
-      return NULL;
+      PANIC("OUT OF FRAMES");
     }
     
     struct frame_table_entry *ft = malloc(sizeof(struct frame_table_entry));
+    if(ft == NULL) {
+      palloc_free_page(kpage);
+      thread_exit(); //may have to be handled in a diff way!!!
+    }
+       
     ft->frame = kpage;
     ft->uaddr = pg_round_down(uaddr);
     ft->owner = t;

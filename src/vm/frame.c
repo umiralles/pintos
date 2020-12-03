@@ -5,7 +5,7 @@
 #include "threads/malloc.h"
 #include "threads/palloc.h"
 
-/* frame table */
+/* Frame table */
 struct hash frame_table;
 struct lock frame_table_lock;
 
@@ -36,7 +36,7 @@ struct frame_table_entry *find_ft_entry(void *uaddr) {
 
   struct hash_elem *elem = hash_find(&frame_table, &key.elem);
 
-  if (elem == NULL) {
+  if(elem == NULL) {
     return NULL;
   }
   
@@ -50,7 +50,7 @@ struct frame_table_entry *find_ft_entry(void *uaddr) {
 void remove_ft_entry(void *uaddr) {
   struct frame_table_entry *ft = find_ft_entry(uaddr);
 
-  if (ft != NULL) {
+  if(ft != NULL) {
     hash_delete(&frame_table, &ft->elem);
     free(ft);
   }

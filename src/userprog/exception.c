@@ -2,15 +2,21 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include "userprog/gdt.h"
+#include "userprog/process.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "vm/page.h"
+#include "vm/frame.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
+
+/* HELPER FUNCTIONS */
+static void exception_exit(struct intr_frame *f); 
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -125,9 +131,12 @@ page_fault (struct intr_frame *f)
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
 
-  struct sup_table_entry *sup_entry; /* The entry of this address in
-				       the suplemental page table */
-
+  struct sup_table_entry *sup_entry;     /* The entry of this address in
+				           the suplemental page table */
+  struct frame_table_entry *frame_entry; /* The entry of this address in
+				           the frame table */
+  struct thread *t = thread_current();   /* The current thread */
+  
   /* Obtain faulting address, the virtual address that was
      accessed to cause the fault.  It may point to code or to
      data.  It is not necessarily the address of the instruction
@@ -151,18 +160,43 @@ page_fault (struct intr_frame *f)
 
   if(!not_present || !is_user_vaddr(fault_addr)) {
     exception_exit(f);
-  }
+  }  
 
-  // search frame table
-
-  sup_entry = find_spt_entry(thread_current(), fault_addr);
-
-  // check for and load page
-
-  /* */
+  /* User memory access */
+  //TODO: WHEN COMPLETELY FINISHED WITH PAGE FAULT HANDLER COMBINE IF STATEMENTS
   if(!user) {
     exception_exit(f);
   }
+  
+  frame_entry = find_ft_entry(fault_addr);
+  sup_entry = find_spt_entry(t, fault_addr);
+
+  if(frame_entry == NULL) {
+    if(sup_entry == NULL) {
+      exception_exit(f);
+    } else {
+      switch(sup_entry->type) {
+        case ZERO_PAGE:
+	  allocate_user_page(fault_addr, PAL_ZERO, sup_entry->writable);
+	  break;
+        case FILE_PAGE:
+	  allocate_user_page(fault_addr, PAL_USER, sup_entry->writable);
+	  //read file into page
+	  break;
+        default:
+	  //swap to file
+	  break;
+      }
+    }
+  }
+
+  //if zero_page - zero it
+    
+  //if file_page - read file into page
+
+  //if swap page - swap to it
+
+  //point the page table entry using pagedir_set_page?
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
@@ -175,6 +209,7 @@ page_fault (struct intr_frame *f)
   kill (f);
 }
 
+/* HELPER FUNCTIONS */
 
 /* Exits the thread after preserving the current result
    and returning an error code of -1 */
