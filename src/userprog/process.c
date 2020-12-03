@@ -349,8 +349,6 @@ process_exit (void)
       /* Close processe's executable (will allow write) */
       file_close(t->executable);
 
-      
-
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
          so that a timer interrupt can't switch back to the
@@ -764,43 +762,4 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
   }
 
   return kpage;
-}
-
-/* Gets a user page to be written to swap space on eviction
-   Creates sup_table_entry for it
-   Takes user page pointer, file pointer, offset within file
-   and whether file is writable */
-void create_file_page(void *upage, struct file *file, off_t offset,
-		      bool writable) {
-//TODO: FREE ON EXIT		      
-  struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));  
-  if(spt == NULL) {
-    thread_exit();
-  }
-  
-  spt->file = file;
-  spt->offset = offset;
-  spt->upage = pg_round_down(upage);
-  spt->writable = writable;
-  spt->empty = false;
-  spt->in_swap = false;
-
-  hash_insert(&thread_current()->sup_table, &spt->elem);
-}
-
-void create_stack_page(void *upage) {
-//TODO: FREE ON EXIT
-  struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));  
-  if(spt == NULL) {
-    thread_exit();
-  }
-  
-  spt->file = NULL;
-  spt->offset = 0;
-  spt->upage = pg_round_down(upage);
-  spt->writable = true;
-  spt->empty = true;
-  spt->in_swap = true;
-
-  hash_insert(&thread_current()->sup_table, &spt->elem);
 }

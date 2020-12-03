@@ -246,6 +246,8 @@ thread_create (const char *name, int priority,
 
   /* Initialise thread for userprog system */
 #ifdef USERPROG
+
+  /* Initialise tid_elem */
   t->tid_elem = malloc(sizeof(struct tid_elem));
 
   if(t->tid_elem == NULL) {
@@ -260,7 +262,9 @@ thread_create (const char *name, int priority,
   sema_init(&t->tid_elem->child_semaphore, 0);
   lock_init(&t->tid_elem->tid_elem_lock);
   list_push_back(&thread_current()->child_tid_list, &t->tid_elem->elem);
-  hash_init(&t->sup_table, sup_table_hash_uaddr, sup_table_cmp_uaddr, NULL);
+
+  /* Initialise suplemental page table */
+  sup_table_init(&t->sup_table);
 #endif
 
   /* Initialise thread for mlfqs scheduling */

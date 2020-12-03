@@ -6,17 +6,60 @@
 #include "vm/frame.h"
 #include "vm/swap.h"
 
-struct hash sup_table;
+static unsigned sup_table_hash_uaddr(const struct hash_elem *e, void *aux UNUSED);
+static bool sup_table_cmp_uaddr(const struct hash_elem *a, const struct hash_elem *b,
+				void *aux UNUSED);
+
+void sup_table_init(struct hash *sup_table) {
+  hash_init(sup_table, sup_table_hash_uaddr, sup_table_cmp_uaddr, NULL);
+}
+
+/* Gets a user page to be written to swap space on eviction
+   Creates sup_table_entry for it
+   Takes user page pointer, file pointer, offset within file
+   and whether file is writable */
+void create_file_page(void *upage, struct file *file, off_t offset,
+		      bool writable) {
+//TODO: FREE ON EXIT		      
+  struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));  
+  if(spt == NULL) {
+    thread_exit();
+  }
+  
+  spt->file = file;
+  spt->offset = offset;
+  spt->upage = pg_round_down(upage);
+  spt->writable = writable;
+  spt->type = FILE_PAGE;
+
+  hash_insert(&thread_current()->sup_table, &spt->elem);
+}
+
+void create_stack_page(void *upage) {
+//TODO: FREE ON EXIT
+  struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));  
+  if(spt == NULL) {
+    thread_exit();
+  }
+  
+  spt->file = NULL;
+  spt->offset = 0;
+  spt->upage = pg_round_down(upage);
+  spt->writable = true;
+  spt->type = ZERO_PAGE;
+
+  hash_insert(&thread_current()->sup_table, &spt->elem);
+}
 
 /* Calculates a hash value based on user page address of e */
-unsigned sup_table_hash_uaddr(const struct hash_elem *e, void *aux UNUSED) {
+static unsigned sup_table_hash_uaddr(const struct hash_elem *e, void *aux UNUSED) {
   struct sup_table_entry *st = hash_entry(e, struct sup_table_entry, elem);
   
   return (unsigned) st->upage / PGSIZE;
 }
 
 /* Compares entries on numerical value of user page address */ 
-bool sup_table_cmp_uaddr(const struct hash_elem *a, const struct hash_elem *b,
+static bool sup_table_cmp_uaddr(const struct hash_elem *a, const struct hash_elem *b,
 		   void *aux UNUSED) {
   struct sup_table_entry *st1 = hash_entry(a, struct sup_table_entry, elem);
   struct sup_table_entry *st2 = hash_entry(b, struct sup_table_entry, elem);
@@ -48,7 +91,7 @@ void remove_spt_entry(void *uaddr) {
   struct sup_table_entry *spt = find_spt_entry(thread_current(), uaddr);
 
   if (spt != NULL) {
-    if (!spt->empty) {
+    if (spt->type == ZERO_PAGE) {
       remove_swap_space(spt->block_number, 1);
     }
     
@@ -65,7 +108,7 @@ void remove_spt_entry(void *uaddr) {
 void destroy_spt_entry(struct hash_elem *e, void *aux UNUSED) {
   struct sup_table_entry *spt = hash_entry(e, struct sup_table_entry, elem);
 
-  if (!spt->empty) {
+  if (spt->type == ZERO_PAGE) {
     remove_swap_space(spt->block_number, 1);
   }
 

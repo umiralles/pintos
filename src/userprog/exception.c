@@ -125,6 +125,9 @@ page_fault (struct intr_frame *f)
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
 
+  struct sup_table_entry *sup_entry; /* The entry of this address in
+				       the suplemental page table */
+
   /* Obtain faulting address, the virtual address that was
      accessed to cause the fault.  It may point to code or to
      data.  It is not necessarily the address of the instruction
@@ -146,17 +149,21 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  if(!not_present || is_kernel_vaddr(fault_addr)) {
-    thread_exit();
-  }	
+  if(!not_present || !is_user_vaddr(fault_addr)) {
+    exception_exit(f);
+  }
+
+  // search frame table
+
+  sup_entry = find_spt_entry(thread_current(), fault_addr);
+
+  // check for and load page
 
   /* */
   if(!user) {
-    f->eip = (void *) f->eax;
-    f->eax = 0xffffffff;
-    thread_exit();
+    exception_exit(f);
   }
-  
+
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
@@ -168,3 +175,11 @@ page_fault (struct intr_frame *f)
   kill (f);
 }
 
+
+/* Exits the thread after preserving the current result
+   and returning an error code of -1 */
+static void exception_exit(struct intr_frame *f) {
+  f->eip = (void *) f->eax;
+  f->eax = 0xffffffff;
+  thread_exit();
+}
