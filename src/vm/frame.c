@@ -13,6 +13,7 @@ static struct lock frame_table_lock;
 static hash_hash_func hash_user_address;
 static hash_less_func cmp_timestamp;
 
+/* Initialise frame_table and frame_table_lock */
 void ft_init(void) {
   hash_init (&frame_table, hash_user_address, cmp_timestamp, NULL);
   lock_init(&frame_table_lock);

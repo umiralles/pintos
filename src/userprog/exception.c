@@ -173,7 +173,7 @@ page_fault (struct intr_frame *f)
   // Not sure when release is needed
   // ft_lock_release();
   
-  sup_entry = find_spt_entry(t, fault_addr);
+  sup_entry = spt_find_entry(t, fault_addr);
 
   if(frame_entry == NULL) {
     if(sup_entry == NULL) {

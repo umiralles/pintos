@@ -21,15 +21,15 @@ struct sup_table_entry {
   enum sup_entry_type type; /* Type of entry (see enum above) */
 };
 
-void sup_table_init(struct hash *sup_table);
+void spt_init(struct hash *sup_table);
 void create_file_page(void *upage, struct file *file, off_t offset,
 		bool writable);
 void create_stack_page(void *upage);
 
 /* Hash functions */
-hash_action_func destroy_spt_entry;
+hash_action_func spt_destroy_entry;
 
-struct sup_table_entry *find_spt_entry(struct thread *t, void *uaddr);
-void remove_spt_entry(void *uaddr);
+struct sup_table_entry *spt_find_entry(struct thread *t, void *uaddr);
+void spt_remove_entry(void *uaddr);
 
 #endif

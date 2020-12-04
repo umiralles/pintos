@@ -12,10 +12,10 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
-#include "vm/frame.h"
-#include "vm/page.h"
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "vm/frame.h"
+#include "vm/page.h"
 #endif
 
 #include "devices/timer.h"
@@ -264,7 +264,7 @@ thread_create (const char *name, int priority,
   list_push_back(&thread_current()->child_tid_list, &t->tid_elem->elem);
 
   /* Initialise suplemental page table */
-  sup_table_init(&t->sup_table);
+  spt_init(&t->sup_table);
 #endif
 
   /* Initialise thread for mlfqs scheduling */

@@ -23,7 +23,7 @@
 #include "devices/timer.h"
 #include "vm/frame.h"
 #include "vm/page.h"
-#include "vm/swap.h"
+//#include "vm/swap.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -756,7 +756,7 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     ft->modified = 0;
     ft->writable = writable;
 
-    struct sup_table_entry *spt = find_spt_entry(t, uaddr);
+    struct sup_table_entry *spt = spt_find_entry(t, uaddr);
 
     /* If something goes horribly wrong */
     if(spt == NULL) {
