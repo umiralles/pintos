@@ -167,8 +167,12 @@ page_fault (struct intr_frame *f)
   if(!user) {
     exception_exit(f);
   }
+
+  ft_lock_acquire();
+  frame_entry = ft_find_entry(fault_addr);
+  // Not sure when release is needed
+  // ft_lock_release();
   
-  frame_entry = find_ft_entry(fault_addr);
   sup_entry = find_spt_entry(t, fault_addr);
 
   if(frame_entry == NULL) {

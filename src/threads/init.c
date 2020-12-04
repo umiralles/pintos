@@ -25,14 +25,14 @@
 #include "threads/pte.h"
 #include "threads/thread.h"
 #include "threads/synch.h"
-#include "vm/frame.h"
-#include "vm/swap.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #include "userprog/exception.h"
 #include "userprog/gdt.h"
 #include "userprog/syscall.h"
 #include "userprog/tss.h"
+#include "vm/frame.h"
+#include "vm/swap.h"
 #else
 #include "tests/threads/tests.h"
 #endif
@@ -166,8 +166,7 @@ paging_init (void)
   size_t page;
   extern char _start, _end_kernel_text;
 
-  hash_init (&frame_table, hash_user_address, cmp_timestamp, NULL);
-  lock_init(&frame_table_lock);
+  ft_init();
   
   pd = init_page_dir = palloc_get_page (PAL_ASSERT | PAL_ZERO);
   pt = NULL;

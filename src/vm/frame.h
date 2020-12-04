@@ -4,11 +4,9 @@
 #include <hash.h>
 #include "threads/synch.h"
 
+/* TODO Note: The frame_table is now static, I hope this is alright. */
 /* Frame table */
-extern struct hash frame_table;
-
-/* Lock for frame table */
-extern struct lock frame_table_lock;
+//extern struct hash frame_table;
 
 /* Single row of the frame table */
 struct frame_table_entry {
@@ -22,11 +20,16 @@ struct frame_table_entry {
   bool writable;         /* whether the thread can be written to or not */
 };
 
-struct frame_table_entry *find_ft_entry(void *uaddr);
-void remove_ft_entry(void *uaddr);
+/* Initialise frame_table */
+void ft_init(void);
 
-/* Hash functions */
-hash_hash_func hash_user_address;
-hash_less_func cmp_timestamp;
+/* Manipulation of frame_table */
+void ft_insert_entry(struct hash_elem *elem);
+struct frame_table_entry *ft_find_entry(void *uaddr);
+void ft_remove_entry(void *uaddr);
+
+/* Access functions for frame_table_lock */
+void ft_lock_acquire(void);
+void ft_lock_release(void);
 
 #endif

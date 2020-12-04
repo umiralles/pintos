@@ -158,9 +158,9 @@ pagedir_clear_page (uint32_t *pd, void *upage)
     }
 
   /* Frees frame table entries related to the pages being freed */
-  lock_acquire(&frame_table_lock);
-  remove_ft_entry(upage);
-  lock_release(&frame_table_lock);
+  ft_lock_acquire();
+  ft_remove_entry(upage);
+  ft_lock_release();
 }
 
 /* Returns true if the PTE for virtual page VPAGE in PD is dirty,

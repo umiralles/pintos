@@ -112,11 +112,15 @@ void destroy_spt_entry(struct hash_elem *e, void *aux UNUSED) {
     //remove_swap_space(spt->block_number, 1);
   }
 
-  /* removes frame table entry of the page if it is in physical memory */
-  struct frame_table_entry *ft = find_ft_entry(spt->upage);
+  /* Removes frame table entry of the page if it is in physical memory */
+  ft_lock_acquire();
+  struct frame_table_entry *ft = ft_find_entry(spt->upage);
+  
   if (ft != NULL) {
-    remove_ft_entry(spt->upage);
+    ft_remove_entry(spt->upage);
   }
+
+  ft_lock_release();
 
   free(spt);
 }
