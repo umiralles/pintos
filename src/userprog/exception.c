@@ -1,8 +1,12 @@
 #include "userprog/exception.h"
 #include <inttypes.h>
 #include <stdio.h>
+#include <string.h>
 #include "userprog/gdt.h"
 #include "userprog/process.h"
+#include "userprog/syscall.h"
+#include "userprog/pagedir.h"
+#include "filesys/file.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
@@ -16,7 +20,8 @@ static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 
 /* HELPER FUNCTIONS */
-static void exception_exit(struct intr_frame *f); 
+static void exception_exit(struct intr_frame *);
+static bool file_to_frame(const struct sup_table_entry *, void *);
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -175,42 +180,48 @@ page_fault (struct intr_frame *f)
   
   sup_entry = spt_find_entry(t, fault_addr);
 
+  void *frame;
+
   if(frame_entry == NULL) {
     if(sup_entry == NULL) {
       exception_exit(f);
     } else {
       switch(sup_entry->type) {
         case ZERO_PAGE:
-	  allocate_user_page(fault_addr, PAL_ZERO, sup_entry->writable);
+	  frame = allocate_user_page(fault_addr, PAL_ZERO, sup_entry->writable);
 	  break;
         case FILE_PAGE:
-	  allocate_user_page(fault_addr, PAL_USER, sup_entry->writable);
-	  //read file into page
+	  frame = allocate_user_page(fault_addr, PAL_USER, sup_entry->writable);
+	  if(!file_to_frame(sup_entry, frame)) {
+	    exception_exit(f);
+	  }
+	  
 	  break;
         default:
 	  //swap to file
-	  break;
+	  exception_exit(f);
       }
     }
+  } else {
+    // only happens in swap
+    exception_exit(f);
   }
 
-  //if zero_page - zero it
-    
-  //if file_page - read file into page
-
-  //if swap page - swap to it
-
-  //point the page table entry using pagedir_set_page?
+  if(!pagedir_set_page(t->pagedir, sup_entry->upage, frame, sup_entry->writable)) {
+    exception_exit(f);
+  }
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
-  printf ("Page fault at %p: %s error %s page in %s context.\n",
+  /*
+    printf ("Page fault at %p: %s error %s page in %s context.\n",
           fault_addr,
           not_present ? "not present" : "rights violation",
           write ? "writing" : "reading",
           user ? "user" : "kernel");
-  kill (f);
+    kill (f);
+  */
 }
 
 /* HELPER FUNCTIONS */
@@ -221,4 +232,18 @@ static void exception_exit(struct intr_frame *f) {
   f->eip = (void *) f->eax;
   f->eax = 0xffffffff;
   thread_exit();
+}
+
+static bool file_to_frame(const struct sup_table_entry *sup_entry, void *frame) {
+  filesys_lock_acquire();
+  file_seek(sup_entry->file, sup_entry->offset);
+  off_t bytes_read = file_read(sup_entry->file, frame, PGSIZE);
+  filesys_lock_release();
+
+  if(bytes_read > PGSIZE) {
+    return false;
+  }
+  
+  memset(frame + bytes_read, 0, PGSIZE - bytes_read);
+  return true;
 }

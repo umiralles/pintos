@@ -727,9 +727,6 @@ install_page (void *upage, void *kpage, bool writable)
    the file is writable or not 
    Returns the address of the frame allocated or null if out of pages */
 void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
-  // Should we do this inside or outside of this function? (release is commented below)
-  // ft_lock_acquire();
-  
   void *kpage = palloc_get_page(PAL_USER | flags);
   struct thread *t = thread_current();
 
@@ -764,9 +761,11 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     }
     //copy_to_frame(ft, spt);
 
+    // not sure if this needs to be acquired earlier?
+    ft_lock_acquire();
     ft_insert_entry(&ft->elem);
+    ft_lock_release();
   }
 
-  // ft_lock_release();
   return kpage;
 }
