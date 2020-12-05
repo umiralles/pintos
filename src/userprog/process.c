@@ -641,7 +641,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
-
+  
   file_seek (file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
     {
@@ -655,25 +655,25 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       struct thread *t = thread_current ();
       uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
       
-      if (kpage == NULL){
+      if(kpage == NULL){
         
         /* Get a new page of memory. */
-        // put file into spt	
-        create_file_page(upage, file, ofs, writable);      
-      	kpage = allocate_user_page(upage, 0, writable);
-
-	if (kpage == NULL) {
-	  return false;
+        // put file into spt
+        if(page_zero_bytes == PGSIZE) {
+	  create_file_page(upage, file, ofs, writable, ZERO_PAGE);
+	} else {
+	  create_file_page(upage, file, ofs, writable, FILE_PAGE);
 	}
       }
 
       /* Load data into the page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
+      /*if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
         {
           palloc_free_page (kpage);
           return false; 
         }
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
+      */
 
       /* Advance. */
       read_bytes -= page_read_bytes;
@@ -729,6 +729,7 @@ install_page (void *upage, void *kpage, bool writable)
 void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
   void *kpage = palloc_get_page(PAL_USER | flags);
   struct thread *t = thread_current();
+  uaddr = pg_round_down(uaddr);
 
   if(kpage != NULL) {
     bool success = install_page(uaddr, kpage, writable);
@@ -746,7 +747,7 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     }
        
     ft->frame = kpage;
-    ft->uaddr = pg_round_down(uaddr);
+    ft->uaddr = uaddr;
     ft->owner = t;
     ft->timestamp = timer_ticks();
     ft->reference_bit = 0;

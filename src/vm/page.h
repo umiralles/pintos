@@ -23,7 +23,7 @@ struct sup_table_entry {
 
 void spt_init(struct hash *sup_table);
 void create_file_page(void *upage, struct file *file, off_t offset,
-		bool writable);
+		      bool writable, enum sup_entry_type type);
 void create_stack_page(void *upage);
 
 /* Hash functions */

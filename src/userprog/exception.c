@@ -175,8 +175,7 @@ page_fault (struct intr_frame *f)
 
   ft_lock_acquire();
   frame_entry = ft_find_entry(fault_addr);
-  // Not sure when release is needed
-  // ft_lock_release();
+  ft_lock_release();
   
   sup_entry = spt_find_entry(t, fault_addr);
 
@@ -184,6 +183,7 @@ page_fault (struct intr_frame *f)
 
   if(frame_entry == NULL) {
     if(sup_entry == NULL) {
+      printf("%p\n", fault_addr);
       exception_exit(f);
     } else {
       switch(sup_entry->type) {
@@ -207,9 +207,11 @@ page_fault (struct intr_frame *f)
     exception_exit(f);
   }
 
+  /*
   if(!pagedir_set_page(t->pagedir, sup_entry->upage, frame, sup_entry->writable)) {
     exception_exit(f);
   }
+  */
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
