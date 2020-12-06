@@ -21,20 +21,29 @@ void spt_init(struct hash *sup_table) {
    Takes user page pointer, file pointer, offset within file
    and whether file is writable */
 void create_file_page(void *upage, struct file *file, off_t offset,
-		      bool writable, enum sup_entry_type type) {
+		      bool writable, size_t read_bytes,
+		      enum sup_entry_type type) {
 //TODO: FREE ON EXIT		      
   struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));  
   if(spt == NULL) {
     thread_exit();
   }
   
+  overwrite_file_page(spt, upage, file, offset, writable, read_bytes, type);
+  	
+  hash_insert(&thread_current()->sup_table, &spt->elem);
+}
+
+void overwrite_file_page(struct sup_table_entry *spt, void *upage,
+			  struct file *file, off_t offset, bool writable, 
+			  size_t read_bytes, enum sup_entry_type type){
   spt->file = file;
   spt->offset = offset;
+  spt->read_bytes = read_bytes;
   spt->upage = upage;
   spt->writable = writable;
   spt->type = type;
-
-  hash_insert(&thread_current()->sup_table, &spt->elem);
+			  
 }
 
 void create_stack_page(void *upage) {

@@ -245,10 +245,10 @@ static void exception_exit(struct intr_frame *f) {
 static bool file_to_frame(const struct sup_table_entry *sup_entry, void *frame) {
   filesys_lock_acquire();
   file_seek(sup_entry->file, sup_entry->offset);
-  off_t bytes_read = file_read(sup_entry->file, frame, PGSIZE);
+  size_t bytes_read = file_read(sup_entry->file, frame, sup_entry->read_bytes);
   filesys_lock_release();
 
-  if(bytes_read > PGSIZE) {
+  if(bytes_read > sup_entry->read_bytes) {
     return false;
   }
   
