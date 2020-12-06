@@ -8,7 +8,8 @@
 enum sup_entry_type {
   ZERO_PAGE,               /* Data cannot be expected to be found there */
   FILE_PAGE,               /* Data is in filesys */
-  IN_SWAP                  /* Data is in swap space */
+  IN_SWAP,                 /* Data is in swap space */
+  STACK_PAGE		    /* Data is in stack */	
 };
 
 struct sup_table_entry {

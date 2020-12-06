@@ -48,7 +48,7 @@ void create_stack_page(void *upage) {
   spt->offset = 0;
   spt->upage = upage;
   spt->writable = true;
-  spt->type = ZERO_PAGE;
+  spt->type = STACK_PAGE;
 
   hash_insert(&thread_current()->sup_table, &spt->elem);
 }

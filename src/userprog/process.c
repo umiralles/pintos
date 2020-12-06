@@ -700,6 +700,7 @@ setup_stack (void **esp)
   *esp = PHYS_BASE;
   
   return true;
+  
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel

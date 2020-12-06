@@ -172,42 +172,48 @@ page_fault (struct intr_frame *f)
   if(!user) {
     exception_exit(f);
   }
-
+  
+  /* Check if page fault occurred because of full stack*/
+  if((f->esp - 32) <= fault_addr) {
+    create_stack_page(pg_round_down(fault_addr));    
+  }
+  
   ft_lock_acquire();
   frame_entry = ft_find_entry(fault_addr);
   ft_lock_release();
-  
+
   sup_entry = spt_find_entry(t, fault_addr);
 
   void *frame;
 
+  if(sup_entry == NULL) {
+    printf("%p\n", fault_addr);
+    exception_exit(f);
+  }
+    
   if(frame_entry == NULL) {
-    if(sup_entry == NULL) {
-      printf("%p\n", fault_addr);
-      exception_exit(f);
-    } else {
-      switch(sup_entry->type) {
-        case ZERO_PAGE:
-	  frame = allocate_user_page(fault_addr, PAL_ZERO, sup_entry->writable);
-	  break;
-        case FILE_PAGE:
-	  frame = allocate_user_page(fault_addr, PAL_USER, sup_entry->writable);
-	  if(!file_to_frame(sup_entry, frame)) {
-	    exception_exit(f);
-	  }
-	  
-	  break;
-        default:
-	  //swap to file
-	  exception_exit(f);
-      }
+    switch(sup_entry->type) {
+      case ZERO_PAGE:
+      case STACK_PAGE:
+	frame = allocate_user_page(fault_addr, PAL_ZERO, sup_entry->writable);
+	break;
+      case FILE_PAGE:
+	frame = allocate_user_page(fault_addr, PAL_USER, sup_entry->writable);
+ 	if(!file_to_frame(sup_entry, frame)) {
+ 	  exception_exit(f);
+ 	}
+      	
+	break;
+      default:
+	//swap to file
+	exception_exit(f);
     }
   } else {
     // only happens in swap
     exception_exit(f);
   }
 
-  /*
+/*
   if(!pagedir_set_page(t->pagedir, sup_entry->upage, frame, sup_entry->writable)) {
     exception_exit(f);
   }
