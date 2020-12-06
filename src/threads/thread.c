@@ -646,6 +646,7 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&t->files);
   t->next_available_fd = STDOUT_FILENO + 1;
   list_init(&t->child_tid_list);
+  t->stack_page_cnt = 0;
 #endif
 
   t->magic = THREAD_MAGIC;

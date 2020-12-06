@@ -13,6 +13,9 @@
 #include "vm/page.h"
 #include "vm/frame.h"
 
+#define MAX_PUSH_SIZE (32)
+#define MAX_STACK_PAGES (2048)
+
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
@@ -174,8 +177,11 @@ page_fault (struct intr_frame *f)
   }
   
   /* Check if page fault occurred because of full stack*/
-  if((f->esp - 32) <= fault_addr) {
-    create_stack_page(pg_round_down(fault_addr));    
+  if((f->esp - MAX_PUSH_SIZE) <= fault_addr) {	
+    if(t->stack_page_cnt++ >= MAX_STACK_PAGES){
+      exception_exit(f);
+    }
+    create_stack_page(pg_round_down(fault_addr));
   }
   
   ft_lock_acquire();
@@ -187,7 +193,6 @@ page_fault (struct intr_frame *f)
   void *frame;
 
   if(sup_entry == NULL) {
-    printf("%p\n", fault_addr);
     exception_exit(f);
   }
     

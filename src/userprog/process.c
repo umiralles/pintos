@@ -654,9 +654,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       
       /* Check if virtual page already allocated */
       struct thread *t = thread_current ();
-      /*uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
-       */
-      
+     
       struct sup_table_entry *spt_entry = spt_find_entry(t, upage);
 
       enum sup_entry_type page_type = page_zero_bytes == PGSIZE

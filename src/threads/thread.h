@@ -136,6 +136,7 @@ struct thread
 					   tid_elem in its parent's
 					   child_tid_list */
     struct hash sup_table;              /* Supplemental page table */
+    int stack_page_cnt;                 /* Number of stack pages added. */
 #endif
 
     /* Owned by thread.c. */
