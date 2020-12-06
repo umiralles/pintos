@@ -5,7 +5,7 @@
 #include "threads/thread.h"
 #include "threads/malloc.h"
 #include "vm/frame.h"
-//#include "vm/swap.h"
+#include "vm/swap.h"
 
 static unsigned spt_hash_uaddr(const struct hash_elem *e, void *aux UNUSED);
 static bool spt_cmp_uaddr(const struct hash_elem *a, const struct hash_elem *b,
@@ -119,8 +119,13 @@ void spt_remove_entry(void *uaddr) {
 void spt_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
   struct sup_table_entry *spt = hash_entry(e, struct sup_table_entry, elem);
 
-  if (spt->type == ZERO_PAGE) {
-    //remove_swap_space(spt->block_number, 1);
+  if(spt->type == IN_SWAP) {
+    file_seek(spt->file, spt->offset);
+    swap_read_file(spt->file, spt->block_number);
+  }
+
+  if (spt->type == IN_SWAP || spt->type == STACK_PAGE) {
+    remove_swap_space(spt->block_number, 1);
   }
 
   /* Removes frame table entry of the page if it is in physical memory */

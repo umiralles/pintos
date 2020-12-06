@@ -1,8 +1,10 @@
 #include "vm/swap.h"
 #include <bitmap.h>
 #include <stddef.h>
+#include "threads/malloc.h"
 #include "threads/vaddr.h"
 #include "devices/block.h"
+#include "filesys/file.h"
 
 struct bitmap *swap_table;
 
@@ -35,4 +37,14 @@ void swap_read_frame(void *frame, size_t start) {
   for (block_sector_t i = start; i < start + PGSIZE / BLOCK_SECTOR_SIZE; i++) {
     block_read(b, i, (frame + i * BLOCK_SECTOR_SIZE));
   }
+}
+
+void swap_read_file(struct file *file, size_t start){
+  void *buffer = malloc(BLOCK_SECTOR_SIZE);
+  struct block *b = block_get_role(BLOCK_SWAP);
+  for (block_sector_t i = start; i < start + PGSIZE / BLOCK_SECTOR_SIZE; i++) {
+    block_read(b, i, (buffer + i * BLOCK_SECTOR_SIZE));
+    file_write(file, buffer, BLOCK_SECTOR_SIZE);
+  }
+  free(buffer);
 }

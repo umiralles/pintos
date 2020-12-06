@@ -10,5 +10,6 @@ size_t find_swap_space(size_t cnt);
 void remove_swap_space(size_t start, size_t cnt);
 void swap_write_frame(void *frame, size_t start);
 void swap_read_frame(void *frame, size_t start);
+void swap_read_file(struct file *file, size_t start);
 
 #endif

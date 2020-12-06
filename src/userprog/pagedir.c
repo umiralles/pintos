@@ -7,6 +7,7 @@
 #include "threads/palloc.h"
 #include "threads/malloc.h"
 #include "vm/frame.h"
+#include "vm/page.h"
 
 static uint32_t *active_pd (void);
 static void invalidate_pagedir (uint32_t *);
@@ -29,6 +30,7 @@ pagedir_create (void)
 void
 pagedir_destroy (uint32_t *pd) 
 {
+  hash_destroy(&thread_current()->sup_table, spt_destroy_entry);
   uint32_t *pde;
 
   if (pd == NULL)
