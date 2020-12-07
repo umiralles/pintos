@@ -143,6 +143,9 @@ page_fault (struct intr_frame *f)
 				           the suplemental page table */
   struct frame_table_entry *frame_entry; /* The entry of this address in
 				           the frame table */
+  void *frame;                           /* The frame of physical
+					    memory the fault_addr
+					    accesses */
   struct thread *t = thread_current();   /* The current thread */
   
   /* Obtain faulting address, the virtual address that was
@@ -166,13 +169,8 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  if(!not_present || !is_user_vaddr(fault_addr)) {
-    exception_exit(f);
-  }  
-
-  /* User memory access */
-  //TODO: WHEN COMPLETELY FINISHED WITH PAGE FAULT HANDLER COMBINE IF STATEMENTS
-  if(!user) {
+  /* Checks for if the page fault happened in a valid case */
+  if(!not_present || !is_user_vaddr(fault_addr) || !user) {
     exception_exit(f);
   }
   
@@ -184,26 +182,31 @@ page_fault (struct intr_frame *f)
     create_stack_page(pg_round_down(fault_addr));
   }
   
+  /* See if an entry into the frame table has already been made */
   ft_lock_acquire();
   frame_entry = ft_find_entry(fault_addr);
   ft_lock_release();
 
+  /* See if the access is supposed to exist in virtual memory */
   sup_entry = spt_find_entry(t, fault_addr);
-
-  void *frame;
 
   if(sup_entry == NULL) {
     exception_exit(f);
   }
-    
+
+  /* Check whether a frame_entry has already been allocated */
   if(frame_entry == NULL) {
+
+    /* Allocate physical memory to map to the fault_addr */
     switch(sup_entry->type) {
       case ZERO_PAGE:
       case STACK_PAGE:
-	frame = allocate_user_page(fault_addr, PAL_ZERO, sup_entry->writable);
+	frame = allocate_user_page(fault_addr, PAL_ZERO,
+				   sup_entry->writable);
 	break;
       case FILE_PAGE:
-	frame = allocate_user_page(fault_addr, PAL_USER, sup_entry->writable);
+	frame = allocate_user_page(fault_addr, PAL_USER,
+				   sup_entry->writable);
  	if(!file_to_frame(sup_entry, frame)) {
  	  exception_exit(f);
  	}
@@ -217,12 +220,6 @@ page_fault (struct intr_frame *f)
     // only happens in swap
     exception_exit(f);
   }
-
-/*
-  if(!pagedir_set_page(t->pagedir, sup_entry->upage, frame, sup_entry->writable)) {
-    exception_exit(f);
-  }
-  */
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to

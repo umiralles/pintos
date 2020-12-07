@@ -1,3 +1,5 @@
+#include "userprog/process.h"
+
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -5,9 +7,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <hash.h>
+
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
-#include "userprog/process.h"
 #include "userprog/syscall.h"
 #include "userprog/tss.h"
 #include "filesys/directory.h"
