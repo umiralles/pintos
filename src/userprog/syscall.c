@@ -13,6 +13,7 @@
 #include "userprog/syscall.h"
 #include "devices/shutdown.h"
 #include "devices/input.h"
+#include "vm/mmap.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -61,6 +62,7 @@ static struct lock filesys_lock;
 void syscall_init(void) {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
   lock_init(&filesys_lock);
+  mmap_init();
 }
 
 static void syscall_handler(struct intr_frame *f) {
@@ -346,15 +348,38 @@ static void syscall_close(struct intr_frame *f) {
   }
 }
 
+/* Maps the file open as fd into the process's virtual address space;
+   Takes in the fd of the file and start address to start mapping from;
+   Returns a unique mapping id or -1 on failure */
 static void syscall_mmap(struct intr_frame *f) {
   int fd = GET_ARGUMENT_VALUE(f, int, 1);
   void *addr = GET_ARGUMENT_VALUE(f, void *, 2);
 
-  if(fd == STDOUT_FILENO || fd == STDIN_FILENO ||
-     addr == NULL || addr != pg_round_down(addr)) {
-    return_value_to_frame(f, (uint32_t)ERROR_CODE);
+  struct thread *t = thread_current();
+  mapid_t map_id = ERROR_CODE;
+
+  /* Check validity of arguments */
+  if(fd != STDOUT_FILENO && fd != STDIN_FILENO &&
+     addr != NULL && addr == pg_round_down(addr)) {
+    struct file_elem *file = get_file(t, fd);
+
+    if(file != NULL) {
+      /* Obtain new file reference for a mapping */
+      filesys_lock_acquire();
+      struct file *file_ref = file_reopen(file->file);
+      off_t length = file_length(file_ref);
+      filesys_lock_release();
+
+      /* Check file is not empty */
+      if(length != 0) {
+	mmap_lock_acquire();
+        map_id = mmap_create_entry(addr, file_ref, length);
+	mmap_lock_release();
+      }
+    }
   }
-  
+
+  return_value_to_frame(f, (uint32_t) map_id);
 }
 
 static void syscall_munmap(struct intr_frame *f) {

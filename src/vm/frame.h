@@ -4,10 +4,6 @@
 #include <hash.h>
 #include "threads/synch.h"
 
-/* TODO Note: The frame_table is now static, I hope this is alright. */
-/* Frame table */
-//extern struct hash frame_table;
-
 /* Single row of the frame table */
 struct frame_table_entry {
   void *uaddr;           /* user virtual address frame represents */
