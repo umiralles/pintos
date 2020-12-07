@@ -30,7 +30,7 @@ pagedir_create (void)
 void
 pagedir_destroy (uint32_t *pd) 
 {
-  hash_destroy(&thread_current()->sup_table, spt_destroy_entry);
+  spt_destroy(&thread_current()->sup_table);
   uint32_t *pde;
 
   if (pd == NULL)

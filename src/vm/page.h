@@ -26,6 +26,7 @@ struct sup_table_entry {
 };
 
 void spt_init(struct hash *sup_table);
+void spt_destroy(struct hash *sup_table);
 void create_file_page(void *upage, struct file *file, off_t offset,
 		      bool writable, size_t read_bytes,
 		      enum sup_entry_type type);
@@ -34,10 +35,6 @@ void overwrite_file_page(struct sup_table_entry *spt, void *upage,
 			  size_t read_bytes, enum sup_entry_type type);		      
 void create_stack_page(void *upage);
 
-/* Hash functions */
-hash_action_func spt_destroy_entry;
-
 struct sup_table_entry *spt_find_entry(struct thread *t, void *uaddr);
-void spt_remove_entry(void *uaddr);
 
 #endif

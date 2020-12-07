@@ -697,12 +697,12 @@ setup_stack (void **esp)
 {
   void *upage = PHYS_BASE - PGSIZE;
   create_stack_page(upage);
-  /*uint8_t *kpage = allocate_user_page(upage, PAL_ZERO, true);
+  uint8_t *kpage = allocate_user_page(upage, PAL_ZERO, true);
 
   if (kpage == NULL) {
     return false;
   }
-  */
+  
   *esp = PHYS_BASE;
   
   return true;
@@ -766,6 +766,10 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     /* If something goes horribly wrong */
     if(spt == NULL) {
       thread_exit();
+    }
+
+    if(spt->type == NEW_STACK_PAGE) {
+      spt->type = STACK_PAGE;
     }
     //copy_to_frame(ft, spt);
 

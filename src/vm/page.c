@@ -7,13 +7,18 @@
 #include "vm/frame.h"
 #include "vm/swap.h"
 
-static unsigned spt_hash_uaddr(const struct hash_elem *e, void *aux UNUSED);
-static bool spt_cmp_uaddr(const struct hash_elem *a, const struct hash_elem *b,
-				void *aux UNUSED);
+/* Hash Functions */
+static hash_hash_func spt_hash_uaddr;
+static hash_less_func spt_cmp_uaddr;
+static hash_action_func spt_destroy_entry;
 
 /* Initialise sup_table */
 void spt_init(struct hash *sup_table) {
   hash_init(sup_table, spt_hash_uaddr, spt_cmp_uaddr, NULL);
+}
+
+void spt_destroy(struct hash *sup_table) {
+  hash_destroy(sup_table, spt_destroy_entry);
 }
 
 /* Gets a user page to be written to swap space on eviction
@@ -93,29 +98,11 @@ struct sup_table_entry *spt_find_entry(struct thread *t, void *uaddr) {
   return hash_entry(elem, struct sup_table_entry, elem);
 }
 
-/* Removes a supplemental page table entry at given page and frees its memory
-   Also clears any swap space allocated to the provided virtual page
-   Takes in the user page address of the entry to search for 
-   Does nothing if the entry cannot be found */
-void spt_remove_entry(void *uaddr) {
-  struct sup_table_entry *spt = spt_find_entry(thread_current(), uaddr);
-
-  if (spt != NULL) {
-    if (spt->type == ZERO_PAGE) {
-      //remove_swap_space(spt->block_number, 1);
-    }
-    
-    hash_delete(&thread_current()->sup_table, &spt->elem);
-    free(spt);
-  }
-}
-
-
 /* Frees a supplemental page table entry at given page
    Clears any swap space allocated to the provided virtual page
    Removes frame table entry at the same user virtual address if it exists
    To be used in hash_destroy to delete all supplemental page table entries */
-void spt_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
+static void spt_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
   struct sup_table_entry *spt = hash_entry(e, struct sup_table_entry, elem);
 
   /* Removes frame table entry of the page if it is in physical memory */
@@ -125,20 +112,31 @@ void spt_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
   if(ft != NULL) {
     /* If page is a modified file in frame, read it back to the file */
     if(spt->type == IN_SWAP || (spt->type == ZERO_PAGE && ft->modified)) {
+      filesys_lock_acquire();
       file_seek(spt->file, spt->offset);
       file_write(spt->file, ft->frame, PGSIZE);
+      filesys_lock_release();
     }
     
     ft_remove_entry(spt->upage);
   } else {
     /* If page in swap system, read it back to its file and free swap space */
     if(spt->type == IN_SWAP) {
+      
+      filesys_lock_acquire();
       file_seek(spt->file, spt->offset);
+      
+      swap_lock_acquire();
       swap_read_file(spt->file, spt->block_number);
+      swap_lock_release();
+
+      filesys_lock_release();
     }
     
     if (spt->type == IN_SWAP || spt->type == STACK_PAGE) {
+      swap_lock_acquire();
       remove_swap_space(spt->block_number, 1);
+      swap_lock_release();
     }
   }
 
