@@ -7,9 +7,8 @@
 #include "vm/frame.h"
 //#include "vm/swap.h"
 
-static unsigned spt_hash_uaddr(const struct hash_elem *e, void *aux UNUSED);
-static bool spt_cmp_uaddr(const struct hash_elem *a, const struct hash_elem *b,
-				void *aux UNUSED);
+static hash_hash_func spt_hash_uaddr;
+static hash_less_func spt_cmp_uaddr;
 
 /* Initialise sup_table */
 void spt_init(struct hash *sup_table) {
@@ -78,8 +77,8 @@ static bool spt_cmp_uaddr(const struct hash_elem *a, const struct hash_elem *b,
   return st1->upage < st2->upage;
 }
 
-/* Finds entry correesponding to a given page in the supplemental page table 
-   Takes in a thread with sup_table to search and  a user page to search for 
+/* Finds entry corresponding to a given page in the supplemental page table 
+   Takes in a thread with sup_table to search and a user page to search for 
    Returns the page entry struct if found or NULL otherwise */
 struct sup_table_entry *spt_find_entry(struct thread *t, void *uaddr) {
   struct sup_table_entry key;
@@ -87,7 +86,7 @@ struct sup_table_entry *spt_find_entry(struct thread *t, void *uaddr) {
   
   struct hash_elem *elem = hash_find(&t->sup_table, &key.elem);
 
-  if (elem == NULL) {
+  if(elem == NULL) {
     return NULL;
   }
   
@@ -101,8 +100,8 @@ struct sup_table_entry *spt_find_entry(struct thread *t, void *uaddr) {
 void spt_remove_entry(void *uaddr) {
   struct sup_table_entry *spt = spt_find_entry(thread_current(), uaddr);
 
-  if (spt != NULL) {
-    if (spt->type == ZERO_PAGE) {
+  if(spt != NULL) {
+    if(spt->type == ZERO_PAGE) {
       //remove_swap_space(spt->block_number, 1);
     }
     
@@ -119,7 +118,7 @@ void spt_remove_entry(void *uaddr) {
 void spt_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
   struct sup_table_entry *spt = hash_entry(e, struct sup_table_entry, elem);
 
-  if (spt->type == ZERO_PAGE) {
+  if(spt->type == ZERO_PAGE) {
     //remove_swap_space(spt->block_number, 1);
   }
 
@@ -127,7 +126,7 @@ void spt_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
   ft_lock_acquire();
   struct frame_table_entry *ft = ft_find_entry(spt->upage);
   
-  if (ft != NULL) {
+  if(ft != NULL) {
     ft_remove_entry(spt->upage);
   }
 

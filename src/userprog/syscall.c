@@ -30,6 +30,8 @@ static void syscall_write(struct intr_frame *f);
 static void syscall_seek(struct intr_frame *f);
 static void syscall_tell(struct intr_frame *f);
 static void syscall_close(struct intr_frame *f);
+static void syscall_mmap(struct intr_frame *f);
+static void syscall_munmap(struct intr_frame *f);
 
 /* MEMORY ACCESS FUNCTION */
 static void syscall_access_memory(const void *vaddr);
@@ -50,7 +52,8 @@ static syscall_func syscalls[MAX_SYSCALLS] = {&syscall_halt, &syscall_exit,
 					      &syscall_open, &syscall_filesize,
 					      &syscall_read, &syscall_write,
 					      &syscall_seek, &syscall_tell,
-					      &syscall_close};
+					      &syscall_close, &syscall_mmap,
+					      &syscall_munmap};
 
 /* Lock used to control access to file system */
 static struct lock filesys_lock;
@@ -101,7 +104,7 @@ static void syscall_exec(struct intr_frame *f) {
 
   /* Returns -1 if child process failed to execute due to an error */
   if(child_tid == TID_ERROR) { 
-    child_tid = -1;
+    child_tid = ERROR_CODE;
   }
 
   return_value_to_frame(f, (uint32_t) child_tid);
@@ -156,7 +159,7 @@ static void syscall_remove(struct intr_frame *f) {
    Returns the fd of the file or -1 if unsuccessful */
 static void syscall_open(struct intr_frame *f) {
   const char *name = GET_ARGUMENT_VALUE(f, char *, 1);
-  int fd = -1;
+  int fd = ERROR_CODE;
 
   if(check_filename(name)) {
     lock_acquire(&filesys_lock);
@@ -192,7 +195,7 @@ static void syscall_open(struct intr_frame *f) {
    or -1 if the file cannot be accessed */
 static void syscall_filesize(struct intr_frame *f) {
   int fd = GET_ARGUMENT_VALUE(f, int, 1);
-  int filesize = -1;
+  int filesize = ERROR_CODE;
   struct thread *t = thread_current();
 
   struct file_elem *file = get_file(t, fd);
@@ -218,7 +221,7 @@ static void syscall_read(struct intr_frame *f) {
   unsigned size = GET_ARGUMENT_VALUE(f, unsigned, 3);
   struct thread *t = thread_current();
   
-  int bytes_read = -1;
+  int bytes_read = ERROR_CODE;
 
   /* Checks entire buffer is in valid user memory */
   syscall_access_block(buffer, size);
@@ -255,7 +258,7 @@ static void syscall_write(struct intr_frame *f) {
   int fd = GET_ARGUMENT_VALUE(f, int, 1);
   const void *buffer = GET_ARGUMENT_VALUE(f, void *, 2);
   unsigned size = GET_ARGUMENT_VALUE(f, unsigned, 3);
-  int bytes_written = -1;
+  int bytes_written = ERROR_CODE;
 
   struct thread *t = thread_current();
 
@@ -303,7 +306,7 @@ static void syscall_seek(struct intr_frame *f) {
    or -1 if there is an error */
 static void syscall_tell(struct intr_frame *f) {
   int fd = GET_ARGUMENT_VALUE(f, int, 1);
-  unsigned position = -1;
+  unsigned position = ERROR_CODE;
   
   struct thread *t = thread_current();
 
@@ -342,6 +345,21 @@ static void syscall_close(struct intr_frame *f) {
     thread_exit();
   }
 }
+
+static void syscall_mmap(struct intr_frame *f) {
+  int fd = GET_ARGUMENT_VALUE(f, int, 1);
+  void *addr = GET_ARGUMENT_VALUE(f, void *, 2);
+
+  if(fd == STDOUT_FILENO || fd == STDIN_FILENO ||
+     addr == NULL || addr != pg_round_down(addr)) {
+    return_value_to_frame(f, (uint32_t)ERROR_CODE);
+  }
+  
+}
+
+static void syscall_munmap(struct intr_frame *f) {
+}
+
 
 /* MEMORY ACCESS FUNCTION */
 /* Checks validity of any user supplied pointer
