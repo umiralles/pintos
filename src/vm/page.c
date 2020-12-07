@@ -56,7 +56,7 @@ void create_stack_page(void *upage) {
   spt->offset = 0;
   spt->upage = upage;
   spt->writable = true;
-  spt->type = STACK_PAGE;
+  spt->type = NEW_STACK_PAGE;
 
   hash_insert(&thread_current()->sup_table, &spt->elem);
 }
@@ -124,7 +124,7 @@ void spt_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
   
   if(ft != NULL) {
     /* If page is a modified file in frame, read it back to the file */
-    if(spt->type == IN_SWAP) {
+    if(spt->type == IN_SWAP || (spt->type == ZERO_PAGE && ft->modified)) {
       file_seek(spt->file, spt->offset);
       file_write(spt->file, ft->frame, PGSIZE);
     }

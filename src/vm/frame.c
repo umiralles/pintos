@@ -45,7 +45,7 @@ void ft_insert_entry(struct hash_elem *elem) {
    Takes in a user virtual address to search for 
    Returns pointer to the table entry or NULL if unsuccessful 
    SHOULD BE CALLED WITH THE FRAME TABLE LOCK ACQUIRED */
-struct frame_table_entry *ft_find_entry(void *uaddr) {
+struct frame_table_entry *ft_find_entry(const void *uaddr) {
   struct frame_table_entry key;
   
   key.uaddr = pg_round_down(uaddr);

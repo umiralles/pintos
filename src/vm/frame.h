@@ -25,7 +25,7 @@ void ft_init(void);
 
 /* Manipulation of frame_table */
 void ft_insert_entry(struct hash_elem *elem);
-struct frame_table_entry *ft_find_entry(void *uaddr);
+struct frame_table_entry *ft_find_entry(const void *uaddr);
 void ft_remove_entry(void *uaddr);
 
 /* Access functions for frame_table_lock */

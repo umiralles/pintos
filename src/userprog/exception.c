@@ -202,6 +202,10 @@ page_fault (struct intr_frame *f)
       case STACK_PAGE:
 	frame = allocate_user_page(fault_addr, PAL_ZERO, sup_entry->writable);
 	break;
+      case NEW_STACK_PAGE:
+	sup_entry->type = STACK_PAGE;
+	frame = allocate_user_page(fault_addr, PAL_ZERO, sup_entry->writable);
+	break;
       case FILE_PAGE:
 	frame = allocate_user_page(fault_addr, PAL_USER, sup_entry->writable);
  	if(!file_to_frame(sup_entry, frame)) {
