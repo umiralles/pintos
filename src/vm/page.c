@@ -47,7 +47,6 @@ void overwrite_file_page(struct sup_table_entry *spt, void *upage,
 }
 
 void create_stack_page(void *upage) {
-//TODO: FREE ON EXIT
   struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));  
   if(spt == NULL) {
     thread_exit();
@@ -119,21 +118,28 @@ void spt_remove_entry(void *uaddr) {
 void spt_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
   struct sup_table_entry *spt = hash_entry(e, struct sup_table_entry, elem);
 
-  if(spt->type == IN_SWAP) {
-    file_seek(spt->file, spt->offset);
-    swap_read_file(spt->file, spt->block_number);
-  }
-
-  if (spt->type == IN_SWAP || spt->type == STACK_PAGE) {
-    remove_swap_space(spt->block_number, 1);
-  }
-
   /* Removes frame table entry of the page if it is in physical memory */
   ft_lock_acquire();
   struct frame_table_entry *ft = ft_find_entry(spt->upage);
   
-  if (ft != NULL) {
+  if(ft != NULL) {
+    /* If page is a modified file in frame, read it back to the file */
+    if(spt->type == IN_SWAP) {
+      file_seek(spt->file, spt->offset);
+      file_write(spt->file, ft->frame, PGSIZE);
+    }
+    
     ft_remove_entry(spt->upage);
+  } else {
+    /* If page in swap system, read it back to its file and free swap space */
+    if(spt->type == IN_SWAP) {
+      file_seek(spt->file, spt->offset);
+      swap_read_file(spt->file, spt->block_number);
+    }
+    
+    if (spt->type == IN_SWAP || spt->type == STACK_PAGE) {
+      remove_swap_space(spt->block_number, 1);
+    }
   }
 
   ft_lock_release();

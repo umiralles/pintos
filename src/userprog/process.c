@@ -697,8 +697,7 @@ setup_stack (void **esp)
 {
   void *upage = PHYS_BASE - PGSIZE;
   create_stack_page(upage);
-  uint8_t *kpage = allocate_user_page(((uint8_t *) PHYS_BASE) - PGSIZE,
-				      PAL_ZERO, true);
+  uint8_t *kpage = allocate_user_page(upage, PAL_ZERO, true);
 
   if (kpage == NULL) {
     return false;

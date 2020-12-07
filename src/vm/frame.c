@@ -11,11 +11,11 @@ static struct lock frame_table_lock;
 
 /* Hash functions for frame_table */
 static hash_hash_func hash_user_address;
-static hash_less_func cmp_timestamp;
+static hash_less_func cmp_user_address;
 
 /* Initialise frame_table and frame_table_lock */
 void ft_init(void) {
-  hash_init (&frame_table, hash_user_address, cmp_timestamp, NULL);
+  hash_init (&frame_table, hash_user_address, cmp_user_address, NULL);
   lock_init(&frame_table_lock);
 }
 
@@ -24,16 +24,16 @@ void ft_init(void) {
 static unsigned hash_user_address(const struct hash_elem *e, void *aux UNUSED) {
   struct frame_table_entry *ft = hash_entry(e, struct frame_table_entry, elem);
 
-  return ((unsigned) ft->frame) / PGSIZE;
+  return ((unsigned) ft->uaddr) / PGSIZE;
 }
 
 /* Compares two frame table elems based on timestamp they were added in */
-static bool cmp_timestamp(const struct hash_elem *a, const struct hash_elem *b,
-		   void *aux UNUSED) {
+static bool cmp_user_address(const struct hash_elem *a,
+			     const struct hash_elem *b, void *aux UNUSED) {
   struct frame_table_entry *ft1 = hash_entry(a, struct frame_table_entry, elem);
   struct frame_table_entry *ft2 = hash_entry(b, struct frame_table_entry, elem);
 
-  return ft1->timestamp < ft2->timestamp;
+  return ft1->uaddr < ft2->uaddr;
 }
 
 /* Inserts hash_elem elem into the frame_table */
