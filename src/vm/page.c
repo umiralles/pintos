@@ -49,6 +49,7 @@ void overwrite_file_page(struct sup_table_entry *spt, void *upage,
   spt->upage = upage;
   spt->writable = writable;
   spt->type = type;
+  spt->ft = NULL;
 			  
 }
 
@@ -63,6 +64,7 @@ void create_stack_page(void *upage) {
   spt->upage = upage;
   spt->writable = true;
   spt->type = NEW_STACK_PAGE;
+  spt->ft = NULL;
 
   hash_insert(&thread_current()->sup_table, &spt->elem);
 }
@@ -71,7 +73,7 @@ void create_stack_page(void *upage) {
 static unsigned spt_hash_uaddr(const struct hash_elem *e, void *aux UNUSED) {
   struct sup_table_entry *st = hash_entry(e, struct sup_table_entry, elem);
   
-  return (unsigned) st->upage / PGSIZE;
+  return (unsigned) st->upage;
 }
 
 /* Compares entries on numerical value of user page address */ 
@@ -108,7 +110,7 @@ static void spt_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
 
   /* Removes frame table entry of the page if it is in physical memory */
   ft_lock_acquire();
-  struct frame_table_entry *ft = ft_find_entry(spt->upage);
+  struct frame_table_entry *ft = spt->ft;
   
   if(ft != NULL) {
     /* If page is a modified file in frame, read it back to the file */
@@ -118,8 +120,14 @@ static void spt_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
       file_write(spt->file, ft->frame, PGSIZE);
       filesys_lock_release();
     }
+
+    lock_acquire(&ft->owners_lock);
+    list_remove(&spt->frame_elem);
     
-    ft_remove_entry(spt->upage);
+    if (list_empty(&ft->owners)) {
+      ft_remove_entry(ft->frame);
+    }
+    lock_release(&ft->owners_lock);
   } else {
     /* If page in swap system, read it back to its file and free swap space */
     if(spt->type == IN_SWAP) {
@@ -142,6 +150,6 @@ static void spt_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
   }
 
   ft_lock_release();
-
+  
   free(spt);
 }

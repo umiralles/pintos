@@ -14,8 +14,8 @@ static struct hash shared_table;
 static struct lock shared_table_lock;
 
 /* Hash functions for frame_table */
-static hash_hash_func hash_user_address;
-static hash_less_func cmp_user_address;
+static hash_hash_func hash_frame_address;
+static hash_less_func cmp_frame_address;
 
 /* Hash functions for shared_table */
 static hash_hash_func hash_file;
@@ -23,7 +23,7 @@ static hash_less_func cmp_file;
 
 /* Initialise frame_table and frame_table_lock */
 void ft_init(void) {
-  hash_init (&frame_table, hash_user_address, cmp_user_address, NULL);
+  hash_init(&frame_table, hash_frame_address, cmp_frame_address, NULL);
   lock_init(&frame_table_lock);
 }
 
@@ -35,19 +35,20 @@ void st_init(void) {
 
 /* Generates a hash function from the user virtual address of a page 
    hash function is address divided by page size which acts as a page number */
-static unsigned hash_user_address(const struct hash_elem *e, void *aux UNUSED) {
+static unsigned hash_frame_address(const struct hash_elem *e,
+				   void *aux UNUSED) {
   struct frame_table_entry *ft = hash_entry(e, struct frame_table_entry, elem);
 
-  return ((unsigned) ft->uaddr) / PGSIZE;
+  return ((unsigned) ft->frame) / PGSIZE;
 }
 
 /* Compares two frame table elems based on user address */
-static bool cmp_user_address(const struct hash_elem *a,
+static bool cmp_frame_address(const struct hash_elem *a,
 			     const struct hash_elem *b, void *aux UNUSED) {
   struct frame_table_entry *ft1 = hash_entry(a, struct frame_table_entry, elem);
   struct frame_table_entry *ft2 = hash_entry(b, struct frame_table_entry, elem);
 
-  return ft1->uaddr < ft2->uaddr;
+  return ft1->frame < ft2->frame;
 }
 
 /* Generates a hash function from the file pointer address of a shared page */
@@ -55,7 +56,7 @@ static unsigned hash_file(const struct hash_elem *e, void *aux UNUSED) {
   struct shared_table_entry *st =
     hash_entry(e, struct shared_table_entry, elem);
 
-  return (unsigned) st->file;
+  return (unsigned) st->file + st->offset;
 }
 
 /* Compares two shared table elems based on file pointer address */
@@ -66,7 +67,7 @@ static bool cmp_file(const struct hash_elem *a,
   struct shared_table_entry *st2 =
     hash_entry(b, struct shared_table_entry, elem);
 
-  return st1->file < st2->file;
+  return ((off_t) st1->file) + st1->offset < ((off_t)st2->file) + st2->offset;
 }
 
 /* Inserts hash_elem elem into the frame_table 
@@ -85,10 +86,10 @@ void st_insert_entry(struct hash_elem *elem) {
    Takes in a user virtual address to search for 
    Returns pointer to the table entry or NULL if unsuccessful 
    SHOULD BE CALLED WITH THE FRAME TABLE LOCK ACQUIRED */
-struct frame_table_entry *ft_find_entry(const void *uaddr) {
+struct frame_table_entry *ft_find_entry(const void *frame) {
   struct frame_table_entry key;
   
-  key.uaddr = pg_round_down(uaddr);
+  key.frame = pg_round_down(frame);
 
   struct hash_elem *elem = hash_find(&frame_table, &key.elem);
 
@@ -103,10 +104,12 @@ struct frame_table_entry *ft_find_entry(const void *uaddr) {
    Takes in a file address to search for 
    Returns pointer to the table entry or NULL if unsuccessful 
    SHOULD BE CALLED WITH THE SHARED TABLE LOCK ACQUIRED */
-struct shared_table_entry *st_find_entry(const struct file *file) {
+struct shared_table_entry *st_find_entry(const struct file *file,
+					 off_t offset) {
   struct shared_table_entry key;
   
   key.file = file;
+  key.offset = offset;
 
   struct hash_elem *elem = hash_find(&shared_table, &key.elem);
 
@@ -121,10 +124,27 @@ struct shared_table_entry *st_find_entry(const struct file *file) {
    Takes in the user virtual address of the entry to remove 
    Does nothing if the entry doesn't exist 
    SHOULD BE CALLED WITH THE FRAME TABLE LOCK ACQUIRED */
-void ft_remove_entry(void *uaddr) {
-  struct frame_table_entry *ft = ft_find_entry(uaddr);
-
+void ft_remove_entry(void *frame) {
+  struct frame_table_entry *ft = ft_find_entry(frame);
+  
   if(ft != NULL) {
+    struct hash_iterator iterator;
+    struct shared_table_entry *st;
+    
+    hash_first(&iterator, &shared_table);
+    bool found = false;
+    
+    st_lock_acquire();
+    while (!found && hash_next(&iterator)) {
+      st = hash_entry(hash_cur(&iterator), struct shared_table_entry, elem);
+      if (ft == st->ft) {
+	hash_delete(&shared_table, &st->elem);
+	free(st);
+	found = true;
+      }
+    }
+    st_lock_release();
+    
     hash_delete(&frame_table, &ft->elem);
     free(ft);
   }
@@ -134,8 +154,8 @@ void ft_remove_entry(void *uaddr) {
    Takes in the file address of the entry to remove 
    Does nothing if the entry doesn't exist 
    SHOULD BE CALLED WITH THE SHARED TABLE LOCK ACQUIRED */
-void st_remove_entry(struct file *file) {
-  struct shared_table_entry *st = st_find_entry(file);
+void st_remove_entry(struct file *file, off_t offset) {
+  struct shared_table_entry *st = st_find_entry(file, offset);
 
   if(st != NULL) {
     hash_delete(&shared_table, &st->elem);

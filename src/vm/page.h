@@ -14,15 +14,17 @@ enum sup_entry_type {
 };
 
 struct sup_table_entry {
-  size_t block_number; 	    /* Where page data can be found after an eviction */
-  struct file *file;        /* File pointer */
-  off_t offset;	            /* Offset of page data in file */
-  size_t read_bytes;        /* Number of bytes to be read from file */
-  void *upage;              /* User page the entry represents */
-  bool writable;            /* Whether data is writable, 
-			       also used to determine */
-  struct hash_elem elem;    /* Used to store in the supplemental page table */
-  enum sup_entry_type type; /* Type of entry (see enum above) */
+  size_t block_number;	        /* Block number of swap space data if present */
+  struct file *file;            /* File pointer */
+  off_t offset;	                /* Offset of page data in file */
+  size_t read_bytes;            /* Number of bytes to be read from file */
+  void *upage;                  /* User page the entry represents */
+  struct frame_table_entry *ft; /* Frame where page is loaded, 
+				   NULL if not loaded */
+  struct list_elem frame_elem;  /* Used to insert into frame's owners list */
+  bool writable;                /* Whether data is writable */
+  struct hash_elem elem;        /* Used to store in supplemental page table */
+  enum sup_entry_type type;     /* Type of entry (see enum above) */
 };
 
 void spt_init(struct hash *sup_table);

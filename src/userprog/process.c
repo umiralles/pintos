@@ -729,6 +729,24 @@ install_page (void *upage, void *kpage, bool writable)
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
 
+/* Installs a shared read only executable file page into an existing frame 
+   Takes the shared pages table and supplemental page table entries 
+   Exits if the page cannot be installed */
+void install_shared_page(struct shared_table_entry *st,
+			 struct sup_table_entry *spt) {
+  struct frame_table_entry *ft = st->ft;
+
+  lock_acquire(&ft->owners_lock);
+  list_push_back(&ft->owners, &spt->frame_elem);
+  lock_release(&ft->owners_lock);
+  spt->ft = ft;
+  bool success = install_page(spt->upage, ft->frame, false);
+
+  if (!success) {
+    thread_exit();
+  }
+}
+
 /* Allocates a user page and installs it into the frame table 
    takes a user address to allocate space for, extra palloc flags and whether
    the file is writable or not 
@@ -754,19 +772,10 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     }
        
     ft->frame = kpage;
-    ft->uaddr = uaddr;
     ft->timestamp = timer_ticks();
     ft->reference_bit = 0;
     ft->modified = 0;
     ft->writable = writable;
-    
-    list_init(&ft->owners);
-    struct owners_list_elem *e = malloc(sizeof(struct owners_list_elem));
-    if (e == NULL) {
-      thread_exit();
-    }
-    e->owner = t;
-    list_push_back(&ft->owners, &e->elem);
    
     struct sup_table_entry *spt = spt_find_entry(t, uaddr);
 
@@ -774,11 +783,30 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     if(spt == NULL) {
       thread_exit();
     }
+    
+    lock_init(&ft->owners_lock);
+    
+    list_init(&ft->owners);
 
+    lock_acquire(&ft->owners_lock);
+    list_push_back(&ft->owners, &spt->elem);
+    lock_release(&ft->owners_lock);
+    
     if(spt->type == NEW_STACK_PAGE) {
       spt->type = STACK_PAGE;
+    } else if (spt->type == FILE_PAGE && !writable) {
+      struct shared_table_entry *st = malloc(sizeof(struct shared_table_entry));
+      if (st == NULL) {
+	thread_exit();
+      }
+      st->ft = ft;
+      st->file = spt->file;
+      st->offset = spt->offset;
+
+      st_lock_acquire();
+      st_insert_entry(&st->elem);
+      st_lock_release();
     }
-    //copy_to_frame(ft, spt);
 
     // not sure if this needs to be acquired earlier?
     ft_lock_acquire();
