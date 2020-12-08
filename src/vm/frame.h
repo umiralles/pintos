@@ -11,20 +11,20 @@
 
 struct owners_list_elem {
   struct thread *owner;         /* thread which owns this frame */
-  struct list_elem frame_elem;  /* Used to insert into frame's owners list */
+  struct list_elem elem;  /* Used to insert into frame's owners list */
 };
 
 struct shared_table_entry {
   struct frame_table_entry *ft;
   struct file *file;
-  struct hash_elem *elem;
+  struct hash_elem elem;
 };
 
 /* Single row of the frame table */
 struct frame_table_entry {
   void *uaddr;           /* user virtual address frame represents */
   void *frame;           /* frame of memory that the data corresponds to */
-  struct list *owners;   /* threads which the page belongs to */
+  struct list owners;   /* threads which the page belongs to */
   int64_t timestamp;     /* time the frame was allocated in ticks */
   struct hash_elem elem; /* used to insert into the table */
   bool reference_bit;    /* used for second chance algorithm calculations */

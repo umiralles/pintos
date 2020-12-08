@@ -755,12 +755,19 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
        
     ft->frame = kpage;
     ft->uaddr = uaddr;
-    ft->owner = t;
     ft->timestamp = timer_ticks();
     ft->reference_bit = 0;
     ft->modified = 0;
     ft->writable = writable;
-
+    
+    list_init(&ft->owners);
+    struct owners_list_elem *e = malloc(sizeof(struct owners_list_elem));
+    if (e == NULL) {
+      thread_exit();
+    }
+    e->owner = t;
+    list_push_back(&ft->owners, &e->elem);
+   
     struct sup_table_entry *spt = spt_find_entry(t, uaddr);
 
     /* If something goes horribly wrong */

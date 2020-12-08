@@ -4,6 +4,7 @@
 #include "threads/vaddr.h"
 #include "threads/thread.h"
 #include "threads/malloc.h"
+#include "userprog/syscall.h"
 #include "vm/frame.h"
 #include "vm/swap.h"
 
