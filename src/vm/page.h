@@ -9,7 +9,8 @@ enum sup_entry_type {
   ZERO_PAGE,               /* Data cannot be expected to be found there */
   FILE_PAGE,               /* Data is in filesys */
   IN_SWAP,                 /* Data is in swap space */
-  STACK_PAGE		   /* Data is in stack */	
+  STACK_PAGE,		    /* Data is in stack */
+  MMAPPED_PAGE		    /* Data is in memory map */
 };
 
 struct sup_table_entry {
@@ -19,7 +20,8 @@ struct sup_table_entry {
   size_t read_bytes;        /* Number of bytes to be read from file */
   void *upage;              /* User page the entry represents */
   bool writable;            /* Whether data is writable, 
-			       also used to determine */
+			       also used to determine ????? 
+			       WHAT?!?! the suspense is kiling me*/
   struct hash_elem elem;    /* Used to store in the supplemental page table */
   enum sup_entry_type type; /* Type of entry (see enum above) */
 };

@@ -135,9 +135,13 @@ struct thread
     struct tid_elem *tid_elem;          /* Pointer to this thread's
 					   tid_elem in its parent's
 					   child_tid_list */
+    // TODO: should we have a ifdef VM? weird to have these in userprog
     struct hash sup_table;              /* Supplemental page table */
+    struct hash mmap_table;             /* Memory mapped files table */
+    int next_map_id;                    /* Next available memory map id */
     int stack_page_cnt;                 /* Number of stack pages added. */
 #endif
+
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

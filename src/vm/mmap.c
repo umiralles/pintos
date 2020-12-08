@@ -1,23 +1,18 @@
 #include "vm/mmap.h"
+
 #include <debug.h>
 
-#include "threads/synch.h"
+#include "threads/thread.h"
 #include "threads/malloc.h"
 
-/* MMAP table*/
-static struct hash mmap_table;
-static struct lock mmap_table_lock;
-static int next_map_id;
 
 /* Hash functions for mmap_table */
 static hash_hash_func mmap_hash_mapid;
 static hash_less_func mmap_cmp_mapid;
 
 /* Initialise sup_table */
-void mmap_init(void) {
-  hash_init(&mmap_table, mmap_hash_mapid, mmap_cmp_mapid, NULL);
-  lock_init(&mmap_table_lock);
-  next_map_id = -1;
+void mmap_init(struct hash *mmap_table) {
+  hash_init(mmap_table, mmap_hash_mapid, mmap_cmp_mapid, NULL);
 }
 
 /* Calculates a hash value based on mmap_entry's identifier */
@@ -44,11 +39,13 @@ mapid_t mmap_create_entry(void *addr, struct file *file, off_t length) {
     return ERROR_CODE;
   }
 
-  mmap_entry->map_id = next_map_id++;
+  struct thread *t = thread_current();
+  	
+  mmap_entry->map_id = t->next_map_id++;
   mmap_entry->addr = addr;
   mmap_entry->file = file;
   mmap_entry->length = length;
-  hash_insert(&mmap_table, &mmap_entry->elem);
+  hash_insert(&t->mmap_table, &mmap_entry->elem);
 
   return mmap_entry->map_id;
 }
@@ -60,7 +57,7 @@ struct mmap_entry *mmap_find_entry(mapid_t map_id) {
   struct mmap_entry key;
   key.map_id = map_id;
   
-  struct hash_elem *elem = hash_find(&mmap_table, &key.elem);
+  struct hash_elem *elem = hash_find(&thread_current()->mmap_table, &key.elem);
 
   if(elem == NULL) {
     return NULL;
@@ -71,22 +68,12 @@ struct mmap_entry *mmap_find_entry(mapid_t map_id) {
 
 /* Removes a mmap entry from the table and frees it 
    Takes in the map_id of the entry to remove 
-   Does nothing if the entry doesn't exist 
-   SHOULD BE CALLED WITH THE MMAP TABLE LOCK ACQUIRED */
+   Does nothing if the entry doesn't exist */
 void mmap_remove_entry(mapid_t map_id) {
   struct mmap_entry *mmap = mmap_find_entry(map_id);
 
   if(mmap != NULL) {
-    hash_delete(&mmap_table, &mmap->elem);
+    hash_delete(&thread_current()->mmap_table, &mmap->elem);
     free(mmap);
   }
-}
-
-/* Functions for accessing frame_table_lock */
-void mmap_lock_acquire(void) {
-  lock_acquire(&mmap_table_lock);
-}
-
-void mmap_lock_release(void) {
-  lock_release(&mmap_table_lock);
 }

@@ -204,6 +204,7 @@ page_fault (struct intr_frame *f)
 	frame = allocate_user_page(fault_addr, PAL_ZERO,
 				   sup_entry->writable);
 	break;
+      case MMAPED_PAGE:  		
       case FILE_PAGE:
 	frame = allocate_user_page(fault_addr, PAL_USER,
 				   sup_entry->writable);
@@ -245,6 +246,11 @@ static void exception_exit(struct intr_frame *f) {
 }
 
 static bool file_to_frame(const struct sup_table_entry *sup_entry, void *frame) {
+  
+  //check if file is null/ mapid is -1
+  //if both true - return false
+  //if mapid - not -1 - call helper func
+  
   filesys_lock_acquire();
   file_seek(sup_entry->file, sup_entry->offset);
   size_t bytes_read = file_read(sup_entry->file, frame, sup_entry->read_bytes);

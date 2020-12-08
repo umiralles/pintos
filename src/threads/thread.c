@@ -16,6 +16,7 @@
 #include "userprog/process.h"
 #include "vm/frame.h"
 #include "vm/page.h"
+#include "vm/mmap.h"
 #endif
 
 #include "devices/timer.h"
@@ -265,6 +266,10 @@ thread_create (const char *name, int priority,
 
   /* Initialise suplemental page table */
   spt_init(&t->sup_table);
+
+  /* Initialise memory mapped files table */
+  mmap_init(&t->mmap_table);
+
 #endif
 
   /* Initialise thread for mlfqs scheduling */
@@ -647,6 +652,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->next_available_fd = STDOUT_FILENO + 1;
   list_init(&t->child_tid_list);
   t->stack_page_cnt = 0;
+  t->next_map_id = -1;
+  
 #endif
 
   t->magic = THREAD_MAGIC;

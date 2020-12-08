@@ -1,5 +1,5 @@
-#ifndef VM_FRAME
-#define VM_FRAME
+#ifndef VM_MMAP
+#define VM_MMAP
 
 #include <hash.h>
 #include "filesys/file.h"
@@ -19,15 +19,11 @@ struct mmap_entry {
 };
 
 /* Initialise mmap_table and map_table_lock (stored in mmap.c) */
-void mmap_init(void);
+void mmap_init(struct hash *mmap_table);
 
 /* Manipulation of mmap_table */
 mapid_t mmap_create_entry(void *addr, struct file *file, off_t length);
 struct mmap_entry *mmap_find_entry(mapid_t map_id);
 void mmap_remove_entry(mapid_t map_id);
-
-/* Access functions for mmap_table_lock */
-void mmap_lock_acquire(void);
-void mmap_lock_release(void);
 
 #endif

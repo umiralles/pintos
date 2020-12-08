@@ -62,7 +62,6 @@ static struct lock filesys_lock;
 void syscall_init(void) {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
   lock_init(&filesys_lock);
-  mmap_init();
 }
 
 static void syscall_handler(struct intr_frame *f) {
@@ -372,10 +371,12 @@ static void syscall_mmap(struct intr_frame *f) {
 
       /* Check file is not empty */
       if(length != 0) {
-	mmap_lock_acquire();
         map_id = mmap_create_entry(addr, file_ref, length);
-	mmap_lock_release();
       }
+      
+      // find number of pages to allocate /PGSIZE
+      // create a sup page entry for each
+      
     }
   }
 
