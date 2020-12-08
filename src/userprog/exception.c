@@ -10,6 +10,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 #include "vm/page.h"
 #include "vm/frame.h"
 

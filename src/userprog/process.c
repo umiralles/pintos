@@ -789,9 +789,11 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     list_init(&ft->owners);
 
     lock_acquire(&ft->owners_lock);
-    list_push_back(&ft->owners, &spt->elem);
+    list_push_back(&ft->owners, &spt->frame_elem);
     lock_release(&ft->owners_lock);
-    
+
+    spt->ft = ft;
+
     if(spt->type == NEW_STACK_PAGE) {
       spt->type = STACK_PAGE;
     } else if (spt->type == FILE_PAGE && !writable) {

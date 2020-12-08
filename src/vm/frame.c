@@ -123,9 +123,12 @@ struct shared_table_entry *st_find_entry(const struct file *file,
 /* Removes a frame table entry from the table and frees it 
    Takes in the user virtual address of the entry to remove 
    Does nothing if the entry doesn't exist 
-   SHOULD BE CALLED WITH THE FRAME TABLE LOCK ACQUIRED */
+   SHOULD BE CALLED WITH THE FRAME TABLE
+   AND OWNERS LIST LOCKS ACQUIRED */
 void ft_remove_entry(void *frame) {
   struct frame_table_entry *ft = ft_find_entry(frame);
+  
+  ASSERT(lock_held_by_current_thread(&ft->owners_lock));
   
   if(ft != NULL) {
     struct hash_iterator iterator;
@@ -143,9 +146,9 @@ void ft_remove_entry(void *frame) {
 	found = true;
       }
     }
-    st_lock_release();
-    
+    st_lock_release(); 
     hash_delete(&frame_table, &ft->elem);
+    lock_release(&ft->owners_lock);
     free(ft);
   }
 }

@@ -11,6 +11,12 @@
 struct bitmap *swap_table;
 static struct lock swap_table_lock;
 
+void swap_init() {
+  swap_table = bitmap_create(block_size(
+                          block_get_role(BLOCK_SWAP)) / BLOCK_SECTOR_SIZE);
+  lock_init(&swap_table_lock);
+}
+
 /* Finds space in swap table for cnt adjascent pages 
    Returns the index of the first sector of the allocated swap space
    MUST ACQUIRE THE SWAP TABLE LOCK BEFORE CALLING */

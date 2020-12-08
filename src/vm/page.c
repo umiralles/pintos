@@ -73,7 +73,7 @@ void create_stack_page(void *upage) {
 static unsigned spt_hash_uaddr(const struct hash_elem *e, void *aux UNUSED) {
   struct sup_table_entry *st = hash_entry(e, struct sup_table_entry, elem);
   
-  return (unsigned) st->upage;
+  return (unsigned) st->upage / PGSIZE;
 }
 
 /* Compares entries on numerical value of user page address */ 
@@ -126,8 +126,9 @@ static void spt_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
     
     if (list_empty(&ft->owners)) {
       ft_remove_entry(ft->frame);
+    } else {
+      lock_release(&ft->owners_lock);
     }
-    lock_release(&ft->owners_lock);
   } else {
     /* If page in swap system, read it back to its file and free swap space */
     if(spt->type == IN_SWAP) {

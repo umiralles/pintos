@@ -6,6 +6,7 @@
 /* Swap table */
 extern struct bitmap *swap_table;
 
+void swap_init(void);
 size_t find_swap_space(size_t cnt);
 void remove_swap_space(size_t start, size_t cnt);
 void swap_write_frame(void *frame, size_t start);
