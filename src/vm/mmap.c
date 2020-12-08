@@ -32,7 +32,7 @@ static bool mmap_cmp_mapid(const struct hash_elem *a, const struct hash_elem *b,
 }
 
 /* Inserts hash_elem elem into the mmap_table */
-mapid_t mmap_create_entry(void *addr, struct file *file, off_t length) {
+mapid_t mmap_create_entry(struct file *file) {
   struct mmap_entry *mmap_entry = malloc(sizeof(struct mmap_entry));
 
   if(mmap_entry == NULL) {
@@ -42,9 +42,7 @@ mapid_t mmap_create_entry(void *addr, struct file *file, off_t length) {
   struct thread *t = thread_current();
   	
   mmap_entry->map_id = t->next_map_id++;
-  mmap_entry->addr = addr;
   mmap_entry->file = file;
-  mmap_entry->length = length;
   hash_insert(&t->mmap_table, &mmap_entry->elem);
 
   return mmap_entry->map_id;

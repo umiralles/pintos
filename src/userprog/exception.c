@@ -10,6 +10,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
 #include "vm/page.h"
 #include "vm/frame.h"
 
@@ -139,12 +140,10 @@ page_fault (struct intr_frame *f)
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
 
-  struct sup_table_entry *sup_entry;     /* The entry of this address in
-				           the suplemental page table */
-  struct frame_table_entry *frame_entry; /* The entry of this address in
-				           the frame table */
-  void *frame;                           /* The frame of physical
-					    memory the fault_addr
+  struct sup_table_entry *sup_entry;     /* The entry of this address in the suplemental
+					    page table */
+  struct frame_table_entry *frame_entry; /* The entry of this address in the frame table */
+  void *frame;                           /* The frame of physical memory the fault_addr
 					    accesses */
   struct thread *t = thread_current();   /* The current thread */
   
@@ -170,7 +169,7 @@ page_fault (struct intr_frame *f)
   user = (f->error_code & PF_U) != 0;
 
   /* Checks for if the page fault happened in a valid case */
-  if(!not_present || !is_user_vaddr(fault_addr) || !user) {
+  if(!not_present || !fault_addr || (user && !is_user_vaddr(fault_addr))) {
     exception_exit(f);
   }
   
@@ -179,6 +178,7 @@ page_fault (struct intr_frame *f)
     if(t->stack_page_cnt++ >= MAX_STACK_PAGES){
       exception_exit(f);
     }
+    
     create_stack_page(pg_round_down(fault_addr));
   }
   
@@ -194,6 +194,11 @@ page_fault (struct intr_frame *f)
     exception_exit(f);
   }
 
+  // don't know if this is covered by !not_present check
+  if(write && !sup_entry->writable) {
+    exception_exit(f);
+  }
+  
   /* Check whether a frame_entry has already been allocated */
   if(frame_entry == NULL) {
 
@@ -204,7 +209,7 @@ page_fault (struct intr_frame *f)
 	frame = allocate_user_page(fault_addr, PAL_ZERO,
 				   sup_entry->writable);
 	break;
-      case MMAPED_PAGE:  		
+      case MMAPPED_PAGE:  		
       case FILE_PAGE:
 	frame = allocate_user_page(fault_addr, PAL_USER,
 				   sup_entry->writable);
@@ -250,11 +255,19 @@ static bool file_to_frame(const struct sup_table_entry *sup_entry, void *frame) 
   //check if file is null/ mapid is -1
   //if both true - return false
   //if mapid - not -1 - call helper func
+
+  bool lock_held = filesys_lock_held_by_current_thread();
   
-  filesys_lock_acquire();
+  if(!lock_held) {
+    filesys_lock_acquire();
+  }
+  
   file_seek(sup_entry->file, sup_entry->offset);
   size_t bytes_read = file_read(sup_entry->file, frame, sup_entry->read_bytes);
-  filesys_lock_release();
+  
+  if(!lock_held) {
+    filesys_lock_release();
+  }
 
   if(bytes_read > sup_entry->read_bytes) {
     return false;

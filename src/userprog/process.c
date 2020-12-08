@@ -470,6 +470,9 @@ load (const char *file_name, void (**eip) (void), void **esp)
   
   process_activate ();
 
+  // when runny multi-oom the filesys_lock below is already acquired by the
+  // current thread
+  
   /* Open executable file. */
   filesys_lock_acquire();
   file = filesys_open (file_name);
@@ -643,7 +646,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
-  
+
   while (read_bytes > 0 || zero_bytes > 0) 
     {
       /* Calculate how to fill this page.
@@ -652,26 +655,16 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
+      filesys_lock_acquire();
       file_seek (file, ofs);
+      filesys_lock_release();
       
-      /* Check if virtual page already allocated */
-      struct thread *t = thread_current ();
-     
-      struct sup_table_entry *spt_entry = spt_find_entry(t, upage);
-
       enum sup_entry_type page_type = page_zero_bytes == PGSIZE
 	? ZERO_PAGE : FILE_PAGE;
       
-      if(spt_entry == NULL){
-        
-        /* Get a new page of memory. */
-        // put file into spt
-	
-	create_file_page(upage, file, ofs, writable, 
-			 page_read_bytes, page_type);
-      } else {
-	overwrite_file_page(spt_entry, upage, file, ofs, writable, 
-			    page_read_bytes, page_type);
+      if(!create_file_page(upage, file, ofs, writable, page_read_bytes,
+			   page_type)) {
+	return false;
       }
 
       /* Load data into the page. */

@@ -13,6 +13,7 @@
 #include "userprog/syscall.h"
 #include "devices/shutdown.h"
 #include "devices/input.h"
+#include "vm/page.h"
 #include "vm/mmap.h"
 
 static void syscall_handler (struct intr_frame *);
@@ -371,12 +372,29 @@ static void syscall_mmap(struct intr_frame *f) {
 
       /* Check file is not empty */
       if(length != 0) {
-        map_id = mmap_create_entry(addr, file_ref, length);
+        map_id = mmap_create_entry(file_ref);
       }
-      
-      // find number of pages to allocate /PGSIZE
-      // create a sup page entry for each
-      
+
+      size_t page_read_bytes;
+      off_t ofs = 0;
+      while(length > 0) {
+        page_read_bytes = length < PGSIZE ? length : PGSIZE;
+
+	filesys_lock_acquire();
+	file_seek(file_ref, ofs);
+	filesys_lock_release();
+
+        if(!create_file_page(addr, file_ref, ofs, true, page_read_bytes,
+			     MMAPPED_PAGE)) {
+	  mmap_remove_entry(map_id);
+	  map_id = ERROR_CODE;
+	  break;
+	}
+
+        length -= page_read_bytes;
+	ofs += PGSIZE;
+        addr += PGSIZE;
+      }
     }
   }
 
@@ -489,4 +507,8 @@ void filesys_lock_acquire(void) {
 
 void filesys_lock_release(void) {
   lock_release(&filesys_lock);
+}
+
+bool filesys_lock_held_by_current_thread(void) {
+  return lock_held_by_current_thread(&filesys_lock);
 }

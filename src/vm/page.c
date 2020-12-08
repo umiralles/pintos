@@ -19,30 +19,34 @@ void spt_init(struct hash *sup_table) {
    Creates sup_table_entry for it
    Takes user page pointer, file pointer, offset within file
    and whether file is writable */
-void create_file_page(void *upage, struct file *file, off_t offset,
+bool create_file_page(void *upage, struct file *file, off_t offset,
 		      bool writable, size_t read_bytes,
 		      enum sup_entry_type type) {
-//TODO: FREE ON EXIT		      
-  struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));  
-  if(spt == NULL) {
-    thread_exit();
-  }
-  
-  overwrite_file_page(spt, upage, file, offset, writable, read_bytes, type);
-  	
-  hash_insert(&thread_current()->sup_table, &spt->elem);
-}
+//TODO: FREE ON EXIT
+  struct thread *t = thread_current ();
 
-void overwrite_file_page(struct sup_table_entry *spt, void *upage,
-			  struct file *file, off_t offset, bool writable, 
-			  size_t read_bytes, enum sup_entry_type type){
+  /* Check if virtual page already allocated */
+  struct sup_table_entry *spt = spt_find_entry(t, upage);
+  
+  if(spt == NULL) {
+    spt = malloc(sizeof(struct sup_table_entry));
+
+    if(spt == NULL) {
+      return false;
+    }
+  }
+
+  /* Overwrite if already there, initialise if not */
   spt->file = file;
   spt->offset = offset;
   spt->read_bytes = read_bytes;
   spt->upage = upage;
   spt->writable = writable;
   spt->type = type;
-			  
+  	
+  hash_insert(&thread_current()->sup_table, &spt->elem);
+
+  return true;
 }
 
 void create_stack_page(void *upage) {
