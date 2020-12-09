@@ -246,6 +246,10 @@ page_fault (struct intr_frame *f)
 /* Exits the thread after preserving the current result
    and returning an error code of -1 */
 static void exception_exit(struct intr_frame *f) {
+  if(filesys_lock_held_by_current_thread()) {
+    filesys_lock_release();
+  }
+  
   f->eip = (void *) f->eax;
   f->eax = 0xffffffff;
   thread_exit();

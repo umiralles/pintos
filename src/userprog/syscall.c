@@ -386,7 +386,8 @@ static void syscall_mmap(struct intr_frame *f) {
 
         if(!create_file_page(addr, file_ref, ofs, true, page_read_bytes,
 			     MMAPPED_PAGE)) {
-	  mmap_remove_entry(map_id);
+	  struct mmap_entry *mmap = mmap_find_entry(map_id);		     
+	  mmap_remove_entry(mmap);
 	  map_id = ERROR_CODE;
 	  break;
 	}
@@ -403,8 +404,9 @@ static void syscall_mmap(struct intr_frame *f) {
 
 static void syscall_munmap(struct intr_frame *f) {
   mapid_t map_id = GET_ARGUMENT_VALUE(f, mapid_t, 1);
-
-  mmap_remove_entry(map_id);
+  
+  struct mmap_entry *mmap = mmap_find_entry(map_id);
+  mmap_remove_entry(mmap);
 }
 
 

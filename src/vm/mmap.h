@@ -23,6 +23,7 @@ void mmap_init(struct hash *);
 /* Manipulation of mmap_table */
 mapid_t mmap_create_entry(struct file *, void *);
 struct mmap_entry *mmap_find_entry(mapid_t);
-void mmap_remove_entry(mapid_t);
+void mmap_remove_entry(struct mmap_entry *);
+void mmap_destroy_entry(struct hash_elem *, void *aux );
 
 #endif

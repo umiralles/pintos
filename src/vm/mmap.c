@@ -4,7 +4,10 @@
 
 #include "threads/thread.h"
 #include "threads/malloc.h"
+#include "threads/vaddr.h"
+#include "filesys/off_t.h"
 #include "userprog/syscall.h"
+#include "userprog/pagedir.h"
 #include "vm/page.h"
 
 /* Hash functions for mmap_table */
@@ -71,17 +74,51 @@ struct mmap_entry *mmap_find_entry(mapid_t map_id) {
 /* Removes a mmap entry from the table and frees it 
    Takes in the map_id of the entry to remove 
    Does nothing if the entry doesn't exist */
-void mmap_remove_entry(mapid_t map_id) {
-  struct mmap_entry *mmap = mmap_find_entry(map_id);
+void mmap_remove_entry(struct mmap_entry *mmap) {
+  
+  if(mmap == NULL) {
+    return;
+  }
+
+  struct thread *t = thread_current();
+
+  filesys_lock_acquire();
+  off_t length = file_length(mmap->file);
+  filesys_lock_release();
+  
+  size_t page_read_bytes;
+  off_t ofs = 0;
+  void *addr = mmap->addr;
+  while(length > 0) {
+    page_read_bytes = length < PGSIZE ? length : PGSIZE;	
+
+    if(pagedir_is_dirty(t->pagedir, addr)){
+      filesys_lock_acquire();
+      file_seek(mmap->file, ofs);
+      file_write(mmap->file, addr, page_read_bytes);
+      filesys_lock_release();
+    }    
+
+    spt_remove_entry(mmap->addr);    	
+
+    length -= PGSIZE;
+    ofs += PGSIZE;
+    addr += PGSIZE;
+  }
 
   if(mmap != NULL) {
     filesys_lock_acquire();
     file_close(mmap->file);
     filesys_lock_release();
-    
-    spt_remove_entry(mmap->addr);    
-    
+       
     hash_delete(&thread_current()->mmap_table, &mmap->elem);
     free(mmap);
   }
+}
+
+void mmap_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
+  struct mmap_entry *mmap = hash_entry(e, struct mmap_entry, elem);
+  
+  mmap_remove_entry(mmap);
+
 }

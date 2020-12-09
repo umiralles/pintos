@@ -25,6 +25,7 @@
 #include "devices/timer.h"
 #include "vm/frame.h"
 #include "vm/page.h"
+#include "vm/mmap.h"
 //#include "vm/swap.h"
 
 static thread_func start_process NO_RETURN;
@@ -293,6 +294,8 @@ process_exit (void)
 {
   struct thread *t = thread_current ();
   uint32_t *pd;
+
+  hash_destroy(&t->mmap_table, mmap_destroy_entry);   
 
   /* Frees all memory associated with open files */
   struct list_elem *current;
