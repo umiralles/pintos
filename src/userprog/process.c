@@ -348,6 +348,8 @@ process_exit (void)
 
       /* Close processe's executable (will allow write) */
       file_close(t->executable);
+     
+      //spt_destroy(&t->sup_table);
 
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
@@ -697,13 +699,12 @@ setup_stack (void **esp)
 {
   void *upage = PHYS_BASE - PGSIZE;
   create_stack_page(upage);
-  uint8_t *kpage = allocate_user_page(((uint8_t *) PHYS_BASE) - PGSIZE,
-				      PAL_ZERO, true);
+  uint8_t *kpage = allocate_user_page(upage, PAL_ZERO, true);
 
   if (kpage == NULL) {
     return false;
   }
-
+  
   *esp = PHYS_BASE;
   
   return true;
@@ -728,6 +729,24 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+/* Installs a shared read only executable file page into an existing frame 
+   Takes the shared pages table and supplemental page table entries 
+   Exits if the page cannot be installed */
+void install_shared_page(struct shared_table_entry *st,
+			 struct sup_table_entry *spt) {
+  struct frame_table_entry *ft = st->ft;
+
+  lock_acquire(&ft->owners_lock);
+  list_push_back(&ft->owners, &spt->frame_elem);
+  lock_release(&ft->owners_lock);
+  spt->ft = ft;
+  bool success = install_page(spt->upage, ft->frame, false);
+
+  if (!success) {
+    thread_exit();
+  }
 }
 
 /* Allocates a user page and installs it into the frame table 
@@ -755,20 +774,43 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     }
        
     ft->frame = kpage;
-    ft->uaddr = uaddr;
-    ft->owner = t;
     ft->timestamp = timer_ticks();
     ft->reference_bit = 0;
     ft->modified = 0;
     ft->writable = writable;
-
+   
     struct sup_table_entry *spt = spt_find_entry(t, uaddr);
 
     /* If something goes horribly wrong */
     if(spt == NULL) {
       thread_exit();
     }
-    //copy_to_frame(ft, spt);
+    
+    lock_init(&ft->owners_lock);
+    
+    list_init(&ft->owners);
+
+    lock_acquire(&ft->owners_lock);
+    list_push_back(&ft->owners, &spt->frame_elem);
+    lock_release(&ft->owners_lock);
+
+    spt->ft = ft;
+
+    if(spt->type == NEW_STACK_PAGE) {
+      spt->type = STACK_PAGE;
+    } else if (spt->type == FILE_PAGE && !writable) {
+      struct shared_table_entry *st = malloc(sizeof(struct shared_table_entry));
+      if (st == NULL) {
+	thread_exit();
+      }
+      st->ft = ft;
+      st->file = spt->file;
+      st->offset = spt->offset;
+
+      st_lock_acquire();
+      st_insert_entry(&st->elem);
+      st_lock_release();
+    }
 
     // not sure if this needs to be acquired earlier?
     ft_lock_acquire();

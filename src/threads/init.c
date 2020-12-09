@@ -167,6 +167,7 @@ paging_init (void)
   extern char _start, _end_kernel_text;
 
   ft_init();
+  st_init();
   
   pd = init_page_dir = palloc_get_page (PAL_ASSERT | PAL_ZERO);
   pt = NULL;
@@ -402,8 +403,7 @@ locate_block_devices (void)
   locate_block_device (BLOCK_SCRATCH, scratch_bdev_name);
 #ifdef VM
   locate_block_device (BLOCK_SWAP, swap_bdev_name);
-  swap_table = bitmap_create(block_size(
-			  block_get_role(BLOCK_SWAP)) / BLOCK_SECTOR_SIZE);
+  swap_init();
 #endif
 }
 

@@ -10,6 +10,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 #include "vm/page.h"
 #include "vm/frame.h"
 
@@ -139,10 +140,10 @@ page_fault (struct intr_frame *f)
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
 
-  struct sup_table_entry *sup_entry;     /* The entry of this address in
-				           the suplemental page table */
-  struct frame_table_entry *frame_entry; /* The entry of this address in
-				           the frame table */
+  struct sup_table_entry *spt;           /* The entry of this address in
+					    the suplemental page table */
+  struct frame_table_entry *ft;          /* The entry of this address in
+					    the frame table */
   struct thread *t = thread_current();   /* The current thread */
   
   /* Obtain faulting address, the virtual address that was
@@ -185,29 +186,50 @@ page_fault (struct intr_frame *f)
   }
   
   ft_lock_acquire();
-  frame_entry = ft_find_entry(fault_addr);
+  ft = ft_find_entry(fault_addr);
   ft_lock_release();
 
-  sup_entry = spt_find_entry(t, fault_addr);
+  spt = spt_find_entry(t, fault_addr);
 
   void *frame;
 
-  if(sup_entry == NULL) {
+  if(spt == NULL) {
     exception_exit(f);
   }
     
-  if(frame_entry == NULL) {
-    switch(sup_entry->type) {
+  if(ft == NULL) {
+    switch(spt->type) {
       case ZERO_PAGE:
+      case NEW_STACK_PAGE:	
       case STACK_PAGE:
-	frame = allocate_user_page(fault_addr, PAL_ZERO, sup_entry->writable);
+	frame = allocate_user_page(fault_addr, PAL_ZERO, spt->writable);
 	break;
       case FILE_PAGE:
-	frame = allocate_user_page(fault_addr, PAL_USER, sup_entry->writable);
- 	if(!file_to_frame(sup_entry, frame)) {
- 	  exception_exit(f);
- 	}
-      	
+	st_lock_acquire();
+	struct shared_table_entry *st = st_find_entry(spt->file, spt->offset);
+	st_lock_release();
+	
+	if (st != NULL) {
+	  install_shared_page(st, spt);
+	} else {
+	  frame = allocate_user_page(fault_addr, PAL_USER, spt->writable);
+	  if(!file_to_frame(spt, frame)) {
+	    exception_exit(f);
+	  }
+	  st = malloc(sizeof(struct shared_table_entry));
+
+	  if(st == NULL) {
+	    thread_exit();
+	  }
+	  
+	  st->ft = ft_find_entry(frame);
+	  st->file = spt->file;
+	  st->offset = spt->offset;
+
+	  st_lock_acquire();
+	  st_insert_entry(&st->elem);
+	  st_lock_release();
+      	}
 	break;
       default:
 	//swap to file
