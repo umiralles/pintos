@@ -235,8 +235,11 @@ page_fault (struct intr_frame *f)
 	    thread_exit();
 	  }
 	  
+          ft_lock_acquire();
 	  st->ft = ft_find_entry(frame);
-	  st->file = spt->file;
+          ft_lock_release();
+	  
+          st->file = spt->file;
 	  st->offset = spt->offset;
 
 	  st_lock_acquire();

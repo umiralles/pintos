@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
+#include <stdio.h>
 #include "threads/init.h"
 #include "threads/pte.h"
 #include "threads/palloc.h"
@@ -46,7 +47,10 @@ pagedir_destroy (uint32_t *pd)
           if (*pte & PTE_P) { 
             struct sup_table_entry *spt =
 		    spt_find_entry(thread_current(), pte);
-	    if(list_size(&spt->ft->owners) <= 1) {
+	    if (spt == NULL) {
+	      printf("%x\n", pte);
+            }
+	    if(spt == NULL || list_size(&spt->ft->owners) <= 1) {
 	      palloc_free_page (pte_get_page (*pte));
 	    }
 	  }
@@ -163,11 +167,6 @@ pagedir_clear_page (uint32_t *pd, void *upage)
       *pte &= ~PTE_P;
       invalidate_pagedir (pd);
     }
-
-  /* Frees frame table entries related to the pages being freed */
-  ft_lock_acquire();
-  ft_remove_entry(upage);
-  ft_lock_release();
 }
 
 /* Returns true if the PTE for virtual page VPAGE in PD is dirty,

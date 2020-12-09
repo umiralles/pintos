@@ -29,27 +29,37 @@ void spt_destroy(struct hash *sup_table) {
 bool create_file_page(void *upage, struct file *file, off_t offset,
 		      bool writable, size_t read_bytes,
 		      enum sup_entry_type type) {
-//TODO: FREE ON EXIT
   struct thread *t = thread_current ();
 
   /* Check if virtual page already allocated */
   struct sup_table_entry *spt = spt_find_entry(t, upage);
   
-  if(spt == NULL) {
-    spt = malloc(sizeof(struct sup_table_entry));
-
-    if(spt == NULL) {
-      return false;
+  if(spt != NULL) {
+    if (type == MMAPPED_PAGE) {
+      return false;	
     }
-  } else if (type == MMAPPED_PAGE) {
-    return false;	
+
+    /* Update metadata if loadsegment is loading same page twice */
+    spt->read_bytes = spt->read_bytes + read_bytes;
+    spt->writable = spt->writable || writable;
+
+    if(spt->type == ZERO_PAGE && type != ZERO_PAGE) {
+      spt->type = type;
+    }
+    return true;
+  }
+
+  spt = malloc(sizeof(struct sup_table_entry));
+
+  if(spt == NULL) {
+    return false;
   }
 
   spt->file = file;
   spt->offset = offset;
   spt->read_bytes = read_bytes;
   spt->ft = NULL;
-  spt->upage = upage;
+  spt->upage = pg_round_down(upage);
   spt->writable = writable;
   spt->type = type;
 	
@@ -66,7 +76,7 @@ void create_stack_page(void *upage) {
   
   spt->file = NULL;
   spt->offset = 0;
-  spt->upage = upage;
+  spt->upage = pg_round_down(upage);
   spt->writable = true;
   spt->type = NEW_STACK_PAGE;
   spt->ft = NULL;
@@ -112,15 +122,9 @@ struct sup_table_entry *spt_find_entry(struct thread *t, void *uaddr) {
    Does nothing if the entry cannot be found */
 void spt_remove_entry(void *uaddr) {
   struct sup_table_entry *spt = spt_find_entry(thread_current(), uaddr);
-
-  if(spt != NULL) {
-    if(spt->type == ZERO_PAGE) {
-      //remove_swap_space(spt->block_number, 1);
-    }
     
-    hash_delete(&thread_current()->sup_table, &spt->elem);
-    free(spt);
-  }
+  hash_delete(&thread_current()->sup_table, &spt->elem);
+  spt_destroy_entry(&spt->elem, NULL);
 }
 
 /* Frees a supplemental page table entry at given page

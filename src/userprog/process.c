@@ -352,9 +352,9 @@ process_exit (void)
       }
 
       /* Close processe's executable (will allow write) */
+      filesys_lock_acquire();
       file_close(t->executable);
-     
-      //spt_destroy(&t->sup_table);
+      filesys_lock_release();
 
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
