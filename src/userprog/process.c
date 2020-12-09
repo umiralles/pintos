@@ -349,7 +349,7 @@ process_exit (void)
       /* Close processe's executable (will allow write) */
       file_close(t->executable);
      
-      spt_destroy(&t->sup_table);
+      //spt_destroy(&t->sup_table);
 
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
