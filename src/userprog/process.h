@@ -14,7 +14,7 @@ void process_activate (void);
 void install_shared_page(struct shared_table_entry *st,
 			 struct sup_table_entry *spt);
 void *allocate_user_page (void* uaddr, enum palloc_flags flags,
-		bool writable);
+			  bool writable);
 
 
 #endif /* userprog/process.h */

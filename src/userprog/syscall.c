@@ -13,6 +13,8 @@
 #include "userprog/syscall.h"
 #include "devices/shutdown.h"
 #include "devices/input.h"
+#include "vm/page.h"
+#include "vm/mmap.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -30,6 +32,8 @@ static void syscall_write(struct intr_frame *f);
 static void syscall_seek(struct intr_frame *f);
 static void syscall_tell(struct intr_frame *f);
 static void syscall_close(struct intr_frame *f);
+static void syscall_mmap(struct intr_frame *f);
+static void syscall_munmap(struct intr_frame *f);
 
 /* MEMORY ACCESS FUNCTION */
 static void syscall_access_memory(const void *vaddr);
@@ -50,7 +54,8 @@ static syscall_func syscalls[MAX_SYSCALLS] = {&syscall_halt, &syscall_exit,
 					      &syscall_open, &syscall_filesize,
 					      &syscall_read, &syscall_write,
 					      &syscall_seek, &syscall_tell,
-					      &syscall_close};
+					      &syscall_close, &syscall_mmap,
+					      &syscall_munmap};
 
 /* Lock used to control access to file system */
 static struct lock filesys_lock;
@@ -101,7 +106,7 @@ static void syscall_exec(struct intr_frame *f) {
 
   /* Returns -1 if child process failed to execute due to an error */
   if(child_tid == TID_ERROR) { 
-    child_tid = -1;
+    child_tid = ERROR_CODE;
   }
 
   return_value_to_frame(f, (uint32_t) child_tid);
@@ -156,7 +161,7 @@ static void syscall_remove(struct intr_frame *f) {
    Returns the fd of the file or -1 if unsuccessful */
 static void syscall_open(struct intr_frame *f) {
   const char *name = GET_ARGUMENT_VALUE(f, char *, 1);
-  int fd = -1;
+  int fd = ERROR_CODE;
 
   if(check_filename(name)) {
     lock_acquire(&filesys_lock);
@@ -192,7 +197,7 @@ static void syscall_open(struct intr_frame *f) {
    or -1 if the file cannot be accessed */
 static void syscall_filesize(struct intr_frame *f) {
   int fd = GET_ARGUMENT_VALUE(f, int, 1);
-  int filesize = -1;
+  int filesize = ERROR_CODE;
   struct thread *t = thread_current();
 
   struct file_elem *file = get_file(t, fd);
@@ -218,7 +223,7 @@ static void syscall_read(struct intr_frame *f) {
   unsigned size = GET_ARGUMENT_VALUE(f, unsigned, 3);
   struct thread *t = thread_current();
   
-  int bytes_read = -1;
+  int bytes_read = ERROR_CODE;
 
   /* Checks entire buffer is in valid user memory */
   syscall_access_block(buffer, size);
@@ -255,7 +260,7 @@ static void syscall_write(struct intr_frame *f) {
   int fd = GET_ARGUMENT_VALUE(f, int, 1);
   const void *buffer = GET_ARGUMENT_VALUE(f, void *, 2);
   unsigned size = GET_ARGUMENT_VALUE(f, unsigned, 3);
-  int bytes_written = -1;
+  int bytes_written = ERROR_CODE;
 
   struct thread *t = thread_current();
 
@@ -303,7 +308,7 @@ static void syscall_seek(struct intr_frame *f) {
    or -1 if there is an error */
 static void syscall_tell(struct intr_frame *f) {
   int fd = GET_ARGUMENT_VALUE(f, int, 1);
-  unsigned position = -1;
+  unsigned position = ERROR_CODE;
   
   struct thread *t = thread_current();
 
@@ -343,6 +348,67 @@ static void syscall_close(struct intr_frame *f) {
   }
 }
 
+/* Maps the file open as fd into the process's virtual address space;
+   Takes in the fd of the file and start address to start mapping from;
+   Returns a unique mapping id or -1 on failure */
+static void syscall_mmap(struct intr_frame *f) {
+  int fd = GET_ARGUMENT_VALUE(f, int, 1);
+  void *addr = GET_ARGUMENT_VALUE(f, void *, 2);
+
+  struct thread *t = thread_current();
+  mapid_t map_id = ERROR_CODE;
+
+  /* Check validity of arguments */
+  if(fd != STDOUT_FILENO && fd != STDIN_FILENO &&
+     addr != NULL && addr == pg_round_down(addr)) {
+    struct file_elem *file = get_file(t, fd);
+
+    if(file != NULL) {
+      /* Obtain new file reference for a mapping */
+      filesys_lock_acquire();
+      struct file *file_ref = file_reopen(file->file);
+      off_t length = file_length(file_ref);
+      filesys_lock_release();
+
+      /* Check file is not empty */
+      if(length != 0) {
+        map_id = mmap_create_entry(file_ref, addr);
+      }
+
+      size_t page_read_bytes;
+      off_t ofs = 0;
+      while(length > 0) {
+        page_read_bytes = length < PGSIZE ? length : PGSIZE;
+
+	filesys_lock_acquire();
+	file_seek(file_ref, ofs);
+	filesys_lock_release();
+
+        if(!create_file_page(addr, file_ref, ofs, true, page_read_bytes,
+			     MMAPPED_PAGE)) {
+	  struct mmap_entry *mmap = mmap_find_entry(map_id);		     
+	  mmap_remove_entry(mmap, false);
+	  map_id = ERROR_CODE;
+	  break;
+	}
+
+        length -= page_read_bytes;
+	ofs += PGSIZE;
+        addr += PGSIZE;
+      }
+    }
+  }
+
+  return_value_to_frame(f, (uint32_t) map_id);
+}
+
+static void syscall_munmap(struct intr_frame *f) {
+  mapid_t map_id = GET_ARGUMENT_VALUE(f, mapid_t, 1);
+  
+  struct mmap_entry *mmap = mmap_find_entry(map_id);
+  mmap_remove_entry(mmap, false);
+}
+
 /* MEMORY ACCESS FUNCTION */
 /* Checks validity of any user supplied pointer
    A valid pointer is one that is in user space and on an allocated page */
@@ -352,7 +418,6 @@ static void syscall_access_memory(const void *vaddr) {
     thread_exit();
   }
 }
-
 
 /* Checks validity of a user block of data of known size
    Takes in the start of the block and its size
@@ -445,4 +510,8 @@ void filesys_lock_acquire(void) {
 
 void filesys_lock_release(void) {
   lock_release(&filesys_lock);
+}
+
+bool filesys_lock_held_by_current_thread(void) {
+  return lock_held_by_current_thread(&filesys_lock);
 }

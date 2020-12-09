@@ -11,6 +11,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
+#include "threads/synch.h"
 #include "vm/page.h"
 #include "vm/frame.h"
 
@@ -140,10 +141,11 @@ page_fault (struct intr_frame *f)
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
 
-  struct sup_table_entry *spt;           /* The entry of this address in
-					    the suplemental page table */
-  struct frame_table_entry *ft;          /* The entry of this address in
-					    the frame table */
+  struct sup_table_entry *spt;           /* The entry of this address in the suplemental
+					    page table */
+  struct frame_table_entry *ft;          /* The entry of this address in the frame table */
+  void *frame;                           /* The frame of physical memory the fault_addr
+					    accesses */
   struct thread *t = thread_current();   /* The current thread */
   
   /* Obtain faulting address, the virtual address that was
@@ -167,13 +169,9 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  if(!not_present || !is_user_vaddr(fault_addr)) {
-    exception_exit(f);
-  }  
-
-  /* User memory access */
-  //TODO: WHEN COMPLETELY FINISHED WITH PAGE FAULT HANDLER COMBINE IF STATEMENTS
-  if(!user) {
+  /* Checks for if the page fault happened in a valid case */
+  if(!not_present || !fault_addr || (user && !is_user_vaddr(fault_addr))
+     || pagedir_get_page(t->pagedir, pg_round_down(fault_addr))) {
     exception_exit(f);
   }
   
@@ -182,28 +180,42 @@ page_fault (struct intr_frame *f)
     if(t->stack_page_cnt++ >= MAX_STACK_PAGES){
       exception_exit(f);
     }
+    
     create_stack_page(pg_round_down(fault_addr));
   }
-  
-  ft_lock_acquire();
-  ft = ft_find_entry(fault_addr);
-  ft_lock_release();
 
+  /* See if the access is supposed to exist in virtual memory */
   spt = spt_find_entry(t, fault_addr);
-
-  void *frame;
 
   if(spt == NULL) {
     exception_exit(f);
   }
-    
+
+  ft = spt->ft;
+
+  // don't know if this is covered by !not_present check
+  if(write && !spt->writable) {
+    exception_exit(f);
+  }
+  
+  /* Check whether a frame_entry has already been allocated */
   if(ft == NULL) {
+
+    /* Allocate physical memory to map to the fault_addr */
     switch(spt->type) {
       case ZERO_PAGE:
       case NEW_STACK_PAGE:	
       case STACK_PAGE:
 	frame = allocate_user_page(fault_addr, PAL_ZERO, spt->writable);
 	break;
+
+      case MMAPPED_PAGE:
+	frame = allocate_user_page(fault_addr, PAL_USER, spt->writable);
+	if(!file_to_frame(spt, frame)) {
+	  exception_exit(f);
+	}
+	break;
+	
       case FILE_PAGE:
 	st_lock_acquire();
 	struct shared_table_entry *st = st_find_entry(spt->file, spt->offset);
@@ -216,6 +228,7 @@ page_fault (struct intr_frame *f)
 	  if(!file_to_frame(spt, frame)) {
 	    exception_exit(f);
 	  }
+
 	  st = malloc(sizeof(struct shared_table_entry));
 
 	  if(st == NULL) {
@@ -231,6 +244,7 @@ page_fault (struct intr_frame *f)
 	  st_lock_release();
       	}
 	break;
+
       default:
 	//swap to file
 	exception_exit(f);
@@ -239,12 +253,6 @@ page_fault (struct intr_frame *f)
     // only happens in swap
     exception_exit(f);
   }
-
-/*
-  if(!pagedir_set_page(t->pagedir, sup_entry->upage, frame, sup_entry->writable)) {
-    exception_exit(f);
-  }
-  */
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
@@ -264,18 +272,35 @@ page_fault (struct intr_frame *f)
 /* Exits the thread after preserving the current result
    and returning an error code of -1 */
 static void exception_exit(struct intr_frame *f) {
+  if(filesys_lock_held_by_current_thread()) {
+    filesys_lock_release();
+  }
+  
   f->eip = (void *) f->eax;
   f->eax = 0xffffffff;
   thread_exit();
 }
 
-static bool file_to_frame(const struct sup_table_entry *sup_entry, void *frame) {
-  filesys_lock_acquire();
-  file_seek(sup_entry->file, sup_entry->offset);
-  size_t bytes_read = file_read(sup_entry->file, frame, sup_entry->read_bytes);
-  filesys_lock_release();
+static bool file_to_frame(const struct sup_table_entry *spt, void *frame) {
+  
+  //check if file is null/ mapid is -1
+  //if both true - return false
+  //if mapid - not -1 - call helper func
 
-  if(bytes_read > sup_entry->read_bytes) {
+  bool lock_held = filesys_lock_held_by_current_thread();
+  
+  if(!lock_held) {
+    filesys_lock_acquire();
+  }
+  
+  file_seek(spt->file, spt->offset);
+  size_t bytes_read = file_read(spt->file, frame, spt->read_bytes);
+  
+  if(!lock_held) {
+    filesys_lock_release();
+  }
+
+  if(bytes_read > spt->read_bytes) {
     return false;
   }
   

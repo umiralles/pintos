@@ -10,7 +10,8 @@ enum sup_entry_type {
   FILE_PAGE,               /* Data is in filesys */
   IN_SWAP,                 /* Data is in swap space */
   STACK_PAGE,		   /* Data is in stack */
-  NEW_STACK_PAGE          /* Data will be in stack, but currently empty */
+  MMAPPED_PAGE,		   /* Data is in memory map */
+  NEW_STACK_PAGE           /* Data will be in stack, but currently empty */
 };
 
 struct sup_table_entry {
@@ -27,16 +28,15 @@ struct sup_table_entry {
   enum sup_entry_type type;     /* Type of entry (see enum above) */
 };
 
-void spt_init(struct hash *sup_table);
-void spt_destroy(struct hash *sup_table);
-void create_file_page(void *upage, struct file *file, off_t offset,
-		      bool writable, size_t read_bytes,
-		      enum sup_entry_type type);
-void overwrite_file_page(struct sup_table_entry *spt, void *upage, 
-			  struct file *file, off_t offset, bool writable, 
-			  size_t read_bytes, enum sup_entry_type type);		      
-void create_stack_page(void *upage);
+/* Initialise sup_table */
+void spt_init(struct hash *);
 
-struct sup_table_entry *spt_find_entry(struct thread *t, void *uaddr);
+/* Manipulation of sup_table */
+bool create_file_page(void *, struct file *, off_t, bool, size_t,
+		      enum sup_entry_type);	      
+void create_stack_page(void *);
+struct sup_table_entry *spt_find_entry(struct thread *, void *);
+void spt_remove_entry(void *);
+void spt_destroy(struct hash *);
 
 #endif

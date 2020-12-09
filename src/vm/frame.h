@@ -6,10 +6,6 @@
 #include "filesys/file.h"
 #include "vm/page.h"
 
-/* TODO Note: The frame_table is now static, I hope this is alright. */
-/* Frame table */
-//extern struct hash frame_table;
-
 struct owners_list_elem {
   struct sup_table_entry *owner; /* sup_table_entry which owns this frame */
   struct list_elem elem;         /* Used to insert into frame's owners list */

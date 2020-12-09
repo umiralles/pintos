@@ -5,7 +5,8 @@
 #include "filesys/file.h"
 
 /* The number of implemented and working system calls in the syscall table */
-#define MAX_SYSCALLS (13)
+#define MAX_SYSCALLS (15)
+#define ERROR_CODE (-1)
 
 /* Takes the value of the argument pointer provided by get_argument */
 #define GET_ARGUMENT_VALUE(frame, type, no)	\
@@ -28,5 +29,6 @@ void syscall_init (void);
 /* Used to access the files lock outside of syscall */
 void filesys_lock_acquire(void);
 void filesys_lock_release(void);
+bool filesys_lock_held_by_current_thread(void);
 
 #endif /* userprog/syscall.h */

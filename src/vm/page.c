@@ -26,31 +26,36 @@ void spt_destroy(struct hash *sup_table) {
    Creates sup_table_entry for it
    Takes user page pointer, file pointer, offset within file
    and whether file is writable */
-void create_file_page(void *upage, struct file *file, off_t offset,
+bool create_file_page(void *upage, struct file *file, off_t offset,
 		      bool writable, size_t read_bytes,
 		      enum sup_entry_type type) {
-//TODO: FREE ON EXIT		      
-  struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));  
-  if(spt == NULL) {
-    thread_exit();
-  }
-  
-  overwrite_file_page(spt, upage, file, offset, writable, read_bytes, type);
-  	
-  hash_insert(&thread_current()->sup_table, &spt->elem);
-}
+//TODO: FREE ON EXIT
+  struct thread *t = thread_current ();
 
-void overwrite_file_page(struct sup_table_entry *spt, void *upage,
-			  struct file *file, off_t offset, bool writable, 
-			  size_t read_bytes, enum sup_entry_type type){
+  /* Check if virtual page already allocated */
+  struct sup_table_entry *spt = spt_find_entry(t, upage);
+  
+  if(spt == NULL) {
+    spt = malloc(sizeof(struct sup_table_entry));
+
+    if(spt == NULL) {
+      return false;
+    }
+  } else if (type == MMAPPED_PAGE) {
+    return false;	
+  }
+
   spt->file = file;
   spt->offset = offset;
   spt->read_bytes = read_bytes;
+  spt->ft = NULL;
   spt->upage = upage;
   spt->writable = writable;
   spt->type = type;
-  spt->ft = NULL;
-			  
+	
+  hash_insert(&thread_current()->sup_table, &spt->elem);
+
+  return true;
 }
 
 void create_stack_page(void *upage) {
@@ -85,8 +90,8 @@ static bool spt_cmp_uaddr(const struct hash_elem *a, const struct hash_elem *b,
   return st1->upage < st2->upage;
 }
 
-/* Finds entry correesponding to a given page in the supplemental page table 
-   Takes in a thread with sup_table to search and  a user page to search for 
+/* Finds entry corresponding to a given page in the supplemental page table 
+   Takes in a thread with sup_table to search and a user page to search for 
    Returns the page entry struct if found or NULL otherwise */
 struct sup_table_entry *spt_find_entry(struct thread *t, void *uaddr) {
   struct sup_table_entry key;
@@ -94,11 +99,28 @@ struct sup_table_entry *spt_find_entry(struct thread *t, void *uaddr) {
   
   struct hash_elem *elem = hash_find(&t->sup_table, &key.elem);
 
-  if (elem == NULL) {
+  if(elem == NULL) {
     return NULL;
   }
   
   return hash_entry(elem, struct sup_table_entry, elem);
+}
+
+/* Removes a supplemental page table entry at given page and frees its memory
+   Also clears any swap space allocated to the provided virtual page
+   Takes in the user page address of the entry to search for 
+   Does nothing if the entry cannot be found */
+void spt_remove_entry(void *uaddr) {
+  struct sup_table_entry *spt = spt_find_entry(thread_current(), uaddr);
+
+  if(spt != NULL) {
+    if(spt->type == ZERO_PAGE) {
+      //remove_swap_space(spt->block_number, 1);
+    }
+    
+    hash_delete(&thread_current()->sup_table, &spt->elem);
+    free(spt);
+  }
 }
 
 /* Frees a supplemental page table entry at given page
