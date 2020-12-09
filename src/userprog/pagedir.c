@@ -47,10 +47,8 @@ pagedir_destroy (uint32_t *pd)
           if (*pte & PTE_P) { 
             struct sup_table_entry *spt =
 		    spt_find_entry(thread_current(), pte);
-	    if (spt == NULL) {
-	      printf("%x\n", pte);
-            }
-	    if(spt == NULL || list_size(&spt->ft->owners) <= 1) {
+	    
+	    if(spt != NULL && list_size(&spt->ft->owners) <= 1) {
 	      palloc_free_page (pte_get_page (*pte));
 	    }
 	  }
