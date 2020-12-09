@@ -169,6 +169,8 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+  printf("%p\n", fault_addr);
+  
   /* Checks for if the page fault happened in a valid case */
   if(!not_present || !fault_addr || (user && !is_user_vaddr(fault_addr))
      || pagedir_get_page(t->pagedir, pg_round_down(fault_addr))) {
@@ -191,12 +193,13 @@ page_fault (struct intr_frame *f)
     exception_exit(f);
   }
 
-  ft = spt->ft;
-
   // don't know if this is covered by !not_present check
-  if(write && !spt->writable) {
+  if((!write && (spt->type == ZERO_PAGE || spt->type == NEW_STACK_PAGE)) ||
+     (write && !spt->writable)) {
     exception_exit(f);
   }
+
+  ft = spt->ft;
   
   /* Check whether a frame_entry has already been allocated */
   if(ft == NULL) {
@@ -217,9 +220,19 @@ page_fault (struct intr_frame *f)
 	break;
 	
       case FILE_PAGE:
-	st_lock_acquire();
+	if(spt->writable) {
+	  frame = allocate_user_page(fault_addr, PAL_USER, spt->writable);
+	  if(!file_to_frame(spt, frame)) {
+	    exception_exit(f);
+	  }
+	  break;
+	}
+
+	bool lock_held = st_lock_held_by_current_thread();
+	
+	run_if_false(st_lock_acquire(), lock_held);
 	struct shared_table_entry *st = st_find_entry(spt->file, spt->offset);
-	st_lock_release();
+	run_if_false(st_lock_release(), lock_held);
 	
 	if (st != NULL) {
 	  install_shared_page(st, spt);
@@ -234,17 +247,21 @@ page_fault (struct intr_frame *f)
 	  if(st == NULL) {
 	    thread_exit();
 	  }
+
+	  lock_held = ft_lock_held_by_current_thread();
 	  
-          ft_lock_acquire();
+          run_if_false(ft_lock_acquire(), lock_held);
 	  st->ft = ft_find_entry(frame);
-          ft_lock_release();
+          run_if_false(ft_lock_release(), lock_held);
 	  
           st->file = spt->file;
 	  st->offset = spt->offset;
 
-	  st_lock_acquire();
+	  lock_held = st_lock_held_by_current_thread();
+	  
+	  run_if_false(st_lock_acquire(), lock_held);
 	  st_insert_entry(&st->elem);
-	  st_lock_release();
+	  run_if_false(st_lock_release(), lock_held);
       	}
 	break;
 
@@ -292,16 +309,10 @@ static bool file_to_frame(const struct sup_table_entry *spt, void *frame) {
 
   bool lock_held = filesys_lock_held_by_current_thread();
   
-  if(!lock_held) {
-    filesys_lock_acquire();
-  }
-  
+  run_if_false(filesys_lock_acquire(), lock_held);
   file_seek(spt->file, spt->offset);
   size_t bytes_read = file_read(spt->file, frame, spt->read_bytes);
-  
-  if(!lock_held) {
-    filesys_lock_release();
-  }
+  run_if_false(filesys_lock_release(), lock_held);
 
   if(bytes_read > spt->read_bytes) {
     return false;
@@ -310,3 +321,4 @@ static bool file_to_frame(const struct sup_table_entry *spt, void *frame) {
   memset(frame + bytes_read, 0, PGSIZE - bytes_read);
   return true;
 }
+

@@ -175,6 +175,10 @@ void ft_lock_release(void) {
   lock_release(&frame_table_lock);
 }
 
+bool ft_lock_held_by_current_thread(void) {
+  return lock_held_by_current_thread(&frame_table_lock);
+}
+
 /* Functions for accessing shared_table_lock */
 void st_lock_acquire(void) {
   lock_acquire(&shared_table_lock);
@@ -182,4 +186,8 @@ void st_lock_acquire(void) {
 
 void st_lock_release(void) {
   lock_release(&shared_table_lock);
+}
+
+bool st_lock_held_by_current_thread(void) {
+  return lock_held_by_current_thread(&shared_table_lock);
 }

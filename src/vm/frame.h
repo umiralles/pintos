@@ -50,7 +50,9 @@ void st_remove_entry(struct file *file, off_t offset);
 /* Access functions for locks */
 void ft_lock_acquire(void);
 void ft_lock_release(void);
+bool ft_lock_held_by_current_thread(void);
 void st_lock_acquire(void);
 void st_lock_release(void);
+bool st_lock_held_by_current_thread(void);
 
 #endif
