@@ -121,10 +121,13 @@ struct sup_table_entry *spt_find_entry(struct thread *t, void *uaddr) {
    Takes in the user page address of the entry to search for 
    Does nothing if the entry cannot be found */
 void spt_remove_entry(void *uaddr) {
+  struct thread *t = thread_current();
   struct sup_table_entry *spt = spt_find_entry(thread_current(), uaddr);
-    
-  hash_delete(&thread_current()->sup_table, &spt->elem);
-  spt_destroy_entry(&spt->elem, NULL);
+
+  if(spt != NULL) {
+    hash_delete(&t->sup_table, &spt->elem);
+    spt_destroy_entry(&spt->elem, NULL);
+  }
 }
 
 /* Frees a supplemental page table entry at given page
