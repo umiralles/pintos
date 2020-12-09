@@ -5,7 +5,7 @@
 #include "threads/thread.h"
 #include "threads/malloc.h"
 #include "userprog/syscall.h"
-
+#include "vm/page.h"
 
 /* Hash functions for mmap_table */
 static hash_hash_func mmap_hash_mapid;
@@ -33,7 +33,7 @@ static bool mmap_cmp_mapid(const struct hash_elem *a, const struct hash_elem *b,
 }
 
 /* Inserts hash_elem elem into the mmap_table */
-mapid_t mmap_create_entry(struct file *file) {
+mapid_t mmap_create_entry(struct file *file, void *addr) {
   struct mmap_entry *mmap_entry = malloc(sizeof(struct mmap_entry));
 
   if(mmap_entry == NULL) {
@@ -44,6 +44,7 @@ mapid_t mmap_create_entry(struct file *file) {
   
   mmap_entry->map_id = t->next_map_id;
   mmap_entry->file = file;
+  mmap_entry->addr = addr;
   hash_insert(&t->mmap_table, &mmap_entry->elem);
 
   t->next_map_id++;	
@@ -77,6 +78,8 @@ void mmap_remove_entry(mapid_t map_id) {
     filesys_lock_acquire();
     file_close(mmap->file);
     filesys_lock_release();
+    
+    spt_remove_entry(mmap->addr);    
     
     hash_delete(&thread_current()->mmap_table, &mmap->elem);
     free(mmap);

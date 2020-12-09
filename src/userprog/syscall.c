@@ -372,7 +372,7 @@ static void syscall_mmap(struct intr_frame *f) {
 
       /* Check file is not empty */
       if(length != 0) {
-        map_id = mmap_create_entry(file_ref);
+        map_id = mmap_create_entry(file_ref, addr);
       }
 
       size_t page_read_bytes;
