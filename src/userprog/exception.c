@@ -141,11 +141,12 @@ page_fault (struct intr_frame *f)
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
 
-  struct sup_table_entry *spt;           /* The entry of this address in the suplemental
-					    page table */
-  struct frame_table_entry *ft;          /* The entry of this address in the frame table */
-  void *frame;                           /* The frame of physical memory the fault_addr
-					    accesses */
+  struct sup_table_entry *spt;           /* The entry of this address in the
+					    suplemental page table */
+  struct frame_table_entry *ft;          /* The entry of this address in the
+                                            frame table */
+  void *frame;                           /* The frame of physical memory the
+					    fault_addr accesses */
   struct thread *t = thread_current();   /* The current thread */
   
   /* Obtain faulting address, the virtual address that was
@@ -174,9 +175,14 @@ page_fault (struct intr_frame *f)
      || pagedir_get_page(t->pagedir, pg_round_down(fault_addr))) {
     exception_exit(f);
   }
+
+  /* If in user access, update the curr_esp in the thread */
+  if(user) {
+    t->curr_esp = f->esp;
+  } 
   
   /* Check if page fault occurred because of full stack*/
-  if((f->esp - MAX_PUSH_SIZE) <= fault_addr) {	
+  if((t->curr_esp - MAX_PUSH_SIZE) <= fault_addr) {	
     if(t->stack_page_cnt++ >= MAX_STACK_PAGES){
       exception_exit(f);
     }
