@@ -652,7 +652,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->next_available_fd = STDOUT_FILENO + 1;
   list_init(&t->child_tid_list);
   t->stack_page_cnt = 0;
-  t->next_map_id = -1;
+  t->next_map_id = 0;
   
 #endif
 

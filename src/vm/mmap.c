@@ -41,10 +41,12 @@ mapid_t mmap_create_entry(struct file *file) {
   }
 
   struct thread *t = thread_current();
-  	
-  mmap_entry->map_id = t->next_map_id++;
+  
+  mmap_entry->map_id = t->next_map_id;
   mmap_entry->file = file;
   hash_insert(&t->mmap_table, &mmap_entry->elem);
+
+  t->next_map_id++;	
 
   return mmap_entry->map_id;
 }
