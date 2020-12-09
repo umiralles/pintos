@@ -814,6 +814,8 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     ft_lock_acquire();
     ft_insert_entry(&ft->elem);
     ft_lock_release();
+  } else {
+    PANIC("Out of memory");
   }
 
   return kpage;

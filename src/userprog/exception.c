@@ -168,8 +168,6 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
-
-  printf("%p\n", fault_addr);
   
   /* Checks for if the page fault happened in a valid case */
   if(!not_present || !fault_addr || (user && !is_user_vaddr(fault_addr))
@@ -194,8 +192,7 @@ page_fault (struct intr_frame *f)
   }
 
   // don't know if this is covered by !not_present check
-  if((!write && (spt->type == ZERO_PAGE || spt->type == NEW_STACK_PAGE)) ||
-     (write && !spt->writable)) {
+  if((!write && spt->type == NEW_STACK_PAGE) || (write && !spt->writable)) {
     exception_exit(f);
   }
 
