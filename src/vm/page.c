@@ -34,9 +34,10 @@ bool create_file_page(void *upage, struct file *file, off_t offset,
     if(spt == NULL) {
       return false;
     }
+  } else if (type == MMAPPED_PAGE) {
+    return false;	
   }
 
-  /* Overwrite if already there, initialise if not */
   spt->file = file;
   spt->offset = offset;
   spt->read_bytes = read_bytes;
