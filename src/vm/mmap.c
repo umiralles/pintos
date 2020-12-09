@@ -4,6 +4,7 @@
 
 #include "threads/thread.h"
 #include "threads/malloc.h"
+#include "userprog/syscall.h"
 
 
 /* Hash functions for mmap_table */
@@ -71,6 +72,10 @@ void mmap_remove_entry(mapid_t map_id) {
   struct mmap_entry *mmap = mmap_find_entry(map_id);
 
   if(mmap != NULL) {
+    filesys_lock_acquire();
+    file_close(mmap->file);
+    filesys_lock_release();
+    
     hash_delete(&thread_current()->mmap_table, &mmap->elem);
     free(mmap);
   }

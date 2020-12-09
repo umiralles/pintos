@@ -169,7 +169,8 @@ page_fault (struct intr_frame *f)
   user = (f->error_code & PF_U) != 0;
 
   /* Checks for if the page fault happened in a valid case */
-  if(!not_present || !fault_addr || (user && !is_user_vaddr(fault_addr))) {
+  if(!not_present || !fault_addr || (user && !is_user_vaddr(fault_addr))
+     || pagedir_get_page(t->pagedir, pg_round_down(fault_addr))) {
     exception_exit(f);
   }
   

@@ -402,6 +402,9 @@ static void syscall_mmap(struct intr_frame *f) {
 }
 
 static void syscall_munmap(struct intr_frame *f) {
+  mapid_t map_id = GET_ARGUMENT_VALUE(f, mapid_t, 1);
+
+  mmap_remove_entry(map_id);
 }
 
 
