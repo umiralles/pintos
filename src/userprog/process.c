@@ -756,8 +756,10 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
   void *kpage = palloc_get_page(PAL_USER | flags);
   struct thread *t = thread_current();
   uaddr = pg_round_down(uaddr);
-
+ 
+  struct sup_table_entry *spt;
   struct frame_table_entry *ft;
+
   if(kpage != NULL) {
     bool success = install_page(uaddr, kpage, writable);
     
@@ -780,7 +782,7 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     ft->modified = 0;
     ft->writable = writable;
    
-    struct sup_table_entry *spt = spt_find_entry(t, uaddr);
+    spt = spt_find_entry(t, uaddr);
 
     /* If something goes horribly wrong */
     if(spt == NULL) {
@@ -795,35 +797,16 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     list_push_back(&ft->owners, &spt->frame_elem);
     lock_release(&ft->owners_lock);
 
-    spt->ft = ft;
-
-    if(spt->type == NEW_STACK_PAGE) {
-      spt->type = STACK_PAGE;
-    } else if (spt->type == FILE_PAGE && !writable) {
-      struct shared_table_entry *st = malloc(sizeof(struct shared_table_entry));
-      if (st == NULL) {
-	thread_exit();
-      }
-      st->ft = ft;
-      st->file = spt->file;
-      st->offset = spt->offset;
-
-      st_lock_acquire();
-      st_insert_entry(&st->elem);
-      st_lock_release();
-    }
-
     // not sure if this needs to be acquired earlier?
     ft_lock_acquire();
     ft_insert_entry(&ft->elem);
     ft_lock_release();
   } else {
-    ft = ft_get_first();
+    ft = ft_get_victim();
     ASSERT(ft != NULL);
     // for all owners pagedir_clear_page and update spt
     // and put the page into swap or filesys
     struct list_elem *e;
-    struct sup_table_entry *spt;
 
     lock_acquire(&ft->owners_lock);
     while(!list_empty(&ft->owners)) {
@@ -861,8 +844,6 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     ft->modified = spt->modified;
     memset(ft->frame, 0, PGSIZE);
 
-    spt->ft = ft;
-
     kpage = ft->frame;
     bool success = install_page(spt->upage, kpage, spt->writable);
     if (!success) {
@@ -870,6 +851,28 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
       PANIC("Evicted installaton fails");
     }
   }
+
+  /* sets loaded page's frame table to the found frame table */
+  spt->ft = ft;
+
+  /* Updates type if new stack page loaded, 
+     adds shared table entry for read only files */
+  if(spt->type == NEW_STACK_PAGE) {
+    spt->type = STACK_PAGE;
+  } else if (spt->type == FILE_PAGE && !writable) {
+    struct shared_table_entry *st = malloc(sizeof(struct shared_table_entry));
+    if (st == NULL) {
+      thread_exit();
+    }
+    st->ft = ft;
+    st->file = spt->file;
+    st->offset = spt->offset;
+    
+    st_lock_acquire();
+    st_insert_entry(&st->elem);
+    st_lock_release();
+  }
+    
 
   return kpage;
 }

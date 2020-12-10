@@ -181,19 +181,21 @@ page_fault (struct intr_frame *f)
   /* If in user access, update the curr_esp in the thread */
   if(user) {
     t->curr_esp = f->esp;
-  } 
+  }
+
+  /* See if the access is supposed to exist in virtual memory */
+  spt = spt_find_entry(t, fault_addr);
   
   /* Check if page fault occurred because of full stack*/
-  if((t->curr_esp - MAX_PUSH_SIZE) <= fault_addr) {	
+  if(spt == NULL && (t->curr_esp - MAX_PUSH_SIZE) <= fault_addr) {
+    //printf("%d\n", page_fault_cnt);
     if(t->stack_page_cnt++ >= MAX_STACK_PAGES){
       exception_exit(f);
     }
     
     create_stack_page(pg_round_down(fault_addr));
+    spt = spt_find_entry(t, fault_addr);
   }
-
-  /* See if the access is supposed to exist in virtual memory */
-  spt = spt_find_entry(t, fault_addr);
 
   if(spt == NULL) {
     exception_exit(f);

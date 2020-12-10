@@ -16,6 +16,7 @@ static struct lock shared_table_lock;
 /* Hash functions for frame_table */
 static hash_hash_func hash_frame_address;
 static hash_less_func cmp_frame_address;
+static hash_action_func reset_reference_bit;
 
 /* Hash functions for shared_table */
 static hash_hash_func hash_file;
@@ -120,14 +121,41 @@ struct shared_table_entry *st_find_entry(const struct file *file,
   return hash_entry(elem, struct shared_table_entry, elem);
 }
 
-struct frame_table_entry *ft_get_first(void) {
+/* Finds a frame to evict and returns it 
+   MUST BE CALLED WITH THE FRAME TABLE LOCK */
+struct frame_table_entry *ft_get_victim(void) {
   struct hash_iterator iterator;
+  struct hash_elem *cur;
+  struct frame_table_entry *ft;
+  
   hash_first(&iterator, &frame_table);
-  if (hash_next(&iterator) == NULL) {
-    return NULL;
+
+  bool victim_found = false;
+  
+  while (!victim_found && hash_next(&iterator)) {
+    cur = hash_cur(&iterator);
+    ft = hash_entry(cur, struct frame_table_entry, elem);
+    victim_found = !ft->reference_bit;
   }
-  struct hash_elem *cur = hash_cur(&iterator);
-  return hash_entry(cur, struct frame_table_entry, elem);
+
+  if (!victim_found) {
+    hash_first(&iterator, &frame_table);
+    return hash_entry(hash_next(&iterator), struct frame_table_entry, elem);
+  } else {
+    return ft;
+  }
+}
+
+/* Hash action func that resets a reference bit to 0 */
+static void reset_reference_bit(struct hash_elem *e, void *aux UNUSED) {
+  struct frame_table_entry *ft = hash_entry(e, struct frame_table_entry, elem);
+
+  ft->reference_bit = 0;
+}
+
+/* Resets all reference bits in the frame table to 0 */
+void ft_reset_reference_bits(void) {
+  hash_apply(&frame_table, reset_reference_bit);
 }
 
 /* Removes a frame table entry from the table and frees it 

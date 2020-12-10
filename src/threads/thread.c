@@ -192,6 +192,11 @@ thread_tick (void)
 	next = list_next(next);
       }
     }
+
+    /* resets refrerence bits every half second */
+    if(timer_ticks() % (TIMER_FREQ * 2) == 0) {
+      ft_reset_reference_bits();
+    }
   }
   
   /* Enforce preemption. */
