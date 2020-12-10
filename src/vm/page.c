@@ -38,9 +38,21 @@ bool create_file_page(void *upage, struct file *file, off_t offset,
     if (type == MMAPPED_PAGE) {
       return false;	
     }
-
+    
     /* Update metadata if loadsegment is loading same page twice */
-    spt->read_bytes = spt->read_bytes + read_bytes;
+    size_t new_read_bytes = spt->read_bytes + read_bytes;
+    
+    if(new_read_bytes > PGSIZE) {
+      spt->read_bytes = PGSIZE;
+      
+      if(!create_file_page(upage + PGSIZE, file, offset + PGSIZE,
+                           writable, new_read_bytes - PGSIZE, type)) {
+        return false;
+      }
+    } else {
+      spt->read_bytes = new_read_bytes;
+    }
+
     spt->writable = spt->writable || writable;
 
     if(spt->type == ZERO_PAGE && type != ZERO_PAGE) {

@@ -9,7 +9,7 @@
 /* Type used by identifiers in memory mapped files */
 typedef uint32_t mapid_t;
 
-/* File mapping struct */
+/* Struct used to put memory mapped files into a mmaped hash table */
 struct mmap_entry {
   mapid_t map_id;          /* The identifier of the map element */
   void *addr;              /* The virtual address of the mapped file */ 

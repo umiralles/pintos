@@ -200,7 +200,7 @@ page_fault (struct intr_frame *f)
   }
 
   // don't know if this is covered by !not_present check
-  if((!write && spt->type == NEW_STACK_PAGE) || (write && !spt->writable)) {
+  if( (write && !spt->writable)) {
     exception_exit(f);
   }
 
