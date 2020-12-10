@@ -120,6 +120,13 @@ struct shared_table_entry *st_find_entry(const struct file *file,
   return hash_entry(elem, struct shared_table_entry, elem);
 }
 
+struct frame_table_entry *ft_get_first(void) {
+  struct hash_iterator iterator;
+  hash_first(&iterator, &frame_table);
+  struct hash_elem *cur = hash_cur(&iterator);
+  return hash_entry(cur, struct frame_table_entry, elem);
+}
+
 /* Removes a frame table entry from the table and frees it 
    Takes in the user virtual address of the entry to remove 
    Does nothing if the entry doesn't exist 

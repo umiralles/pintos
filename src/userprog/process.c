@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <hash.h>
+#include <list.h>
 
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
@@ -26,7 +27,7 @@
 #include "vm/frame.h"
 #include "vm/page.h"
 #include "vm/mmap.h"
-//#include "vm/swap.h"
+#include "vm/swap.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -756,16 +757,18 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
   struct thread *t = thread_current();
   uaddr = pg_round_down(uaddr);
 
+  struct frame_table_entry *ft;
   if(kpage != NULL) {
     bool success = install_page(uaddr, kpage, writable);
     
     //TODO: add eviction in null case
     if(!success) {
       palloc_free_page(kpage);
-      PANIC("OUT OF FRAMES");
+      thread_exit();
+      //PANIC("OUT OF FRAMES");
     }
     
-    struct frame_table_entry *ft = malloc(sizeof(struct frame_table_entry));
+    ft = malloc(sizeof(struct frame_table_entry));
     if(ft == NULL) {
       palloc_free_page(kpage);
       thread_exit(); //may have to be handled in a diff way!!!
@@ -816,6 +819,36 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     ft_lock_release();
   } else {
     PANIC("Out of memory");
+    ft = ft_get_first();
+    // for all owners pagedir_clear_page and update spt
+    // and put the page into swap or filesys
+    struct list_elem *e;
+    struct thread *t;
+    struct sup_table_entry *spt;
+    while(!list_empty(&ft->owners)) {
+      e = list_pop_front(&ft->owners);
+      spt = list_entry(e, struct sup_table_entry, frame_elem);
+      if(spt->ft == NULL) {
+        PANIC("Invalid type in frame");
+      }
+      if(spt->writable && ft->modified) {
+        //put in swap
+	swap_lock_acquire();
+	size_t start = find_swap_space(1);
+	swap_write_frame(ft->frame, start);	
+	swap_lock_release();
+        if(spt->type == ZERO_PAGE || spt->type == FILE_PAGE) {
+	  spt->type = IN_SWAP_FILE;
+	}
+      }
+      spt->ft = NULL;
+      pagedir_clear_page(spt->owner->pagedir, spt->upage);
+    }
+    spt = spt_find_entry(t, uaddr);
+    list_push_back(&ft->owners, &spt->frame_elem);
+    ft->reference_bit = 1;
+    ft->writable = spt->writable;
+    ft->modified = spt->modified;
   }
 
   return kpage;

@@ -27,6 +27,7 @@ static void page_fault (struct intr_frame *);
 /* HELPER FUNCTIONS */
 static void exception_exit(struct intr_frame *);
 static bool file_to_frame(const struct sup_table_entry *, void *);
+static bool stack_to_frame(const struct sup_table_entry *spt, void *frame);
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -213,6 +214,9 @@ page_fault (struct intr_frame *f)
       case NEW_STACK_PAGE:	
       case STACK_PAGE:
 	frame = allocate_user_page(fault_addr, PAL_ZERO, spt->writable);
+	if(!stack_to_frame(spt, frame)) {
+          exception_exit(f);
+	}
 	break;
 
       case MMAPPED_PAGE:
@@ -325,3 +329,6 @@ static bool file_to_frame(const struct sup_table_entry *spt, void *frame) {
   return true;
 }
 
+static bool stack_to_frame(const struct sup_table_entry *spt, void *frame) {
+  return false;  
+}

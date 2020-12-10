@@ -6,12 +6,14 @@
 #include "threads/thread.h"
 
 enum sup_entry_type {
-  ZERO_PAGE,               /* Data cannot be expected to be found there */
-  FILE_PAGE,               /* Data is in filesys */
-  IN_SWAP,                 /* Data is in swap space */
-  STACK_PAGE,		   /* Data is in stack */
-  MMAPPED_PAGE,		   /* Data is in memory map */
-  NEW_STACK_PAGE           /* Data will be in stack, but currently empty */
+	// empty stack page, empty file page, r/o file page, writable file page
+	// stack page in swap, stack page in frame
+  ZERO_PAGE,               /* Empty file page, either in frame or not stored */
+  FILE_PAGE,               /* Data is a file in filesys or frame */
+  IN_SWAP_FILE,            /* Data is a file in swap space */
+  STACK_PAGE,		   /* Data is a stack page, in frame or in swap */
+  MMAPPED_PAGE,		   /* Data is in memory map, in frame or in swap */
+  NEW_STACK_PAGE           /* Empty stack page, not stored */
 };
 
 struct sup_table_entry {
@@ -23,7 +25,9 @@ struct sup_table_entry {
   struct frame_table_entry *ft; /* Frame where page is loaded, 
 				   NULL if not loaded */
   struct list_elem frame_elem;  /* Used to insert into frame's owners list */
+  struct thread *owner;		/* Pointer to thread which owns this sup table */
   bool writable;                /* Whether data is writable */
+  bool modified;		/* Whether data was modified */
   struct hash_elem elem;        /* Used to store in supplemental page table */
   enum sup_entry_type type;     /* Type of entry (see enum above) */
 };

@@ -38,6 +38,7 @@ void ft_insert_entry(struct hash_elem *elem);
 struct frame_table_entry *ft_find_entry(const void *frame);
 void ft_remove_entry(void *frame);
 
+struct frame_table_entry *ft_get_first(void);
 
 /* Initialise shared_table */
 void st_init(void);
