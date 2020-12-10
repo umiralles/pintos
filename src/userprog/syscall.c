@@ -176,7 +176,9 @@ static void syscall_open(struct intr_frame *f) {
       if(current_file == NULL) {
 	lock_release(&filesys_lock);
 	thread_exit();
-      }      
+      }
+      create_alloc_elem(current_file, false);
+      
       fd = t->next_available_fd;
       t->next_available_fd++;
 
@@ -184,6 +186,7 @@ static void syscall_open(struct intr_frame *f) {
       current_file->file = file;
 
       list_push_back(&t->files, &current_file->elem);
+      remove_alloc_elem(current_file);
     } 
     lock_release(&filesys_lock);
   }

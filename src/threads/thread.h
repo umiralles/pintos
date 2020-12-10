@@ -44,12 +44,6 @@ struct tid_elem {
   bool has_faulted;		      /* True when process exits erroneously
 					 duing startup */
 };
-
-/* Element to store a pointer (used for allocated_pointers list) */
-struct pointer_elem {
-  void *pointer;
-  struct list_elem elem;
-};
 #endif
 
 /* A kernel thread or user process.
@@ -197,4 +191,5 @@ list_less_func cmp_priority;
 /* Donations function. */
 void donation_grant(struct lock *lock, int priority);
 void donation_revoke(struct lock *lock);
+
 #endif /* threads/thread.h */

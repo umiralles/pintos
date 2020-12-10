@@ -197,8 +197,8 @@ page_fault (struct intr_frame *f)
     exception_exit(f);
   }
 
-  // don't know if this is covered by !not_present check
-  if( (write && !spt->writable)) {
+  // don't know if this is covered by !not_present checkx
+  if(write && !spt->writable) {
     exception_exit(f);
   }
 

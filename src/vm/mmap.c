@@ -7,6 +7,7 @@
 #include "threads/vaddr.h"
 #include "filesys/off_t.h"
 #include "userprog/syscall.h"
+#include "userprog/process.h"
 #include "userprog/pagedir.h"
 #include "vm/page.h"
 
@@ -47,6 +48,7 @@ mapid_t mmap_create_entry(struct file *file, void *addr) {
   if(mmap_entry == NULL) {
     return ERROR_CODE;
   }
+  create_alloc_elem(mmap_entry, false);
 
   struct thread *t = thread_current();
   
@@ -54,6 +56,7 @@ mapid_t mmap_create_entry(struct file *file, void *addr) {
   mmap_entry->file = file;
   mmap_entry->addr = addr;
   hash_insert(&t->mmap_table, &mmap_entry->elem);
+  remove_alloc_elem(mmap_entry);
 
   t->next_map_id++;	
 

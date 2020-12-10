@@ -3,7 +3,6 @@
 
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
-#include "threads/palloc.h"
 
 /* Frame table */
 static struct hash frame_table;

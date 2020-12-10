@@ -21,7 +21,7 @@ struct mmap_entry {
 void mmap_init(struct hash *);
 
 /* Destroy mmap_table */
-void mmap_destroy(struct hash *mmap_table);
+void mmap_destroy(struct hash *);
 
 /* Manipulation of mmap_table */
 mapid_t mmap_create_entry(struct file *, void *);

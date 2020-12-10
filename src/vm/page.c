@@ -5,6 +5,7 @@
 #include "threads/thread.h"
 #include "threads/malloc.h"
 #include "userprog/syscall.h"
+#include "userprog/process.h"
 #include "vm/frame.h"
 #include "vm/swap.h"
 
@@ -66,6 +67,7 @@ bool create_file_page(void *upage, struct file *file, off_t offset,
   if(spt == NULL) {
     return false;
   }
+  create_alloc_elem(spt, false);
 
   spt->file = file;
   spt->offset = offset;
@@ -74,8 +76,9 @@ bool create_file_page(void *upage, struct file *file, off_t offset,
   spt->upage = pg_round_down(upage);
   spt->writable = writable;
   spt->type = type;
-	
+  
   hash_insert(&thread_current()->sup_table, &spt->elem);
+  remove_alloc_elem(spt);
 
   return true;
 }
@@ -85,6 +88,7 @@ void create_stack_page(void *upage) {
   if(spt == NULL) {
     thread_exit();
   }
+  create_alloc_elem(spt, false);
   
   spt->file = NULL;
   spt->offset = 0;
@@ -94,6 +98,7 @@ void create_stack_page(void *upage) {
   spt->ft = NULL;
 
   hash_insert(&thread_current()->sup_table, &spt->elem);
+  remove_alloc_elem(spt);
 }
 
 /* Calculates a hash value based on user page address of e */
