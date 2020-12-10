@@ -295,6 +295,10 @@ static void exception_exit(struct intr_frame *f) {
   thread_exit();
 }
 
+/* Writes a page of data from a file into a frame 
+   Takes the supplemental page entry related to the file 
+   and the frame table entry related to the frame 
+   Returns false if more data is found than expected */
 static bool file_to_frame(struct sup_table_entry *spt, void *frame) {
   
   //check if file is null/ mapid is -1
@@ -316,6 +320,9 @@ static bool file_to_frame(struct sup_table_entry *spt, void *frame) {
   return true;
 }
 
+/* Writes a page of data from the swap system to a frame 
+   Takes the supplemental page table entry corresponding to the swapped data
+   and the frame table entry corresponding to the frame */
 static void swap_to_frame(struct sup_table_entry *spt, void *frame) {
   bool lock_held = swap_lock_held_by_current_thread();
 

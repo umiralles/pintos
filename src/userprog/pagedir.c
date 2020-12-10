@@ -54,6 +54,7 @@ pagedir_destroy (uint32_t *pd)
 	  }
         palloc_free_page (pt);
       }
+  /* Frees supplemental page table and all other corresponding table entries */
   spt_destroy(&thread_current()->sup_table);
   palloc_free_page (pd);
 }

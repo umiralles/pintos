@@ -673,15 +673,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 	return false;
       }
 
-      /* Load data into the page. */
-      /*if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-        {
-          palloc_free_page (kpage);
-          return false; 
-        }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
-      */
-
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
@@ -697,6 +688,9 @@ static bool
 setup_stack (void **esp) 
 {
   void *upage = PHYS_BASE - PGSIZE;
+
+  /* Creates supplemental page table entry for initial stack 
+     and allocates a frame for it */
   create_stack_page(upage);
   uint8_t *kpage = allocate_user_page(upage, PAL_ZERO, true);
 
@@ -761,19 +755,19 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
   struct frame_table_entry *ft;
 
   if(kpage != NULL) {
+    /* Allocation successful, adds frame to table */
     bool success = install_page(uaddr, kpage, writable);
     
-    //TODO: add eviction in null case
     if(!success) {
       palloc_free_page(kpage);
       thread_exit();
-      //PANIC("OUT OF FRAMES");
     }
     
+    /* Create and initialise new frame table entry */
     ft = malloc(sizeof(struct frame_table_entry));
     if(ft == NULL) {
       palloc_free_page(kpage);
-      thread_exit(); //may have to be handled in a diff way!!!
+      thread_exit(); 
     }
        
     ft->frame = kpage;
@@ -784,39 +778,41 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
    
     spt = spt_find_entry(t, uaddr);
 
-    /* If something goes horribly wrong */
     if(spt == NULL) {
       thread_exit();
     }
     
-    lock_init(&ft->owners_lock);
-    
+    /* Initialises new objects in the frame table */
+    lock_init(&ft->owners_lock);    
     list_init(&ft->owners);
 
+    /* Adds supplemental page table entry into owners list */
     lock_acquire(&ft->owners_lock);
     list_push_back(&ft->owners, &spt->frame_elem);
     lock_release(&ft->owners_lock);
 
-    // not sure if this needs to be acquired earlier?
     ft_lock_acquire();
     ft_insert_entry(&ft->elem);
     ft_lock_release();
   } else {
+    /* Allocation fails, frame is evicted and has its metadata replaced */
+
     ft_lock_acquire();
     ft = ft_get_victim();
     ft_lock_release();
+
     ASSERT(ft != NULL);
-    // for all owners pagedir_clear_page and update spt
-    // and put the page into swap or filesys
+    /* For all owners pagedir_clear_page and update spt
+       and put the page into swap or filesys */
     struct list_elem *e;
 
     lock_acquire(&ft->owners_lock);
     if(ft->writable) {
-      // only one owner
+      /* Get the frame's owner (only has one owner as writable) */
       e = list_pop_front(&ft->owners);
       spt = list_entry(e, struct sup_table_entry, frame_elem);
       if(pagedir_is_dirty(spt->owner->pagedir, spt->upage)) {
-        //put in swap
+        /* Put frame data in swap system */
         swap_lock_acquire();
         size_t start = find_swap_space(1);
         if (start == BITMAP_ERROR) {
@@ -827,6 +823,8 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
         swap_write_frame(ft->frame, start);
         swap_lock_release();
         spt->block_number = start;
+
+        /* Indicate file is in swap system if it is a file page */
         if(spt->type == ZERO_PAGE || spt->type == FILE_PAGE) {
           spt->type = IN_SWAP_FILE;
         }
@@ -835,7 +833,7 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
 	pagedir_clear_page(spt->owner->pagedir, spt->upage);
       }
     } else {
-      // can have multiple owners
+      /* Remove each owner of the frame and remove the shared table entry */
       e = list_pop_front(&ft->owners);
       spt = list_entry(e, struct sup_table_entry, frame_elem);
       st_remove_entry(spt->file, spt->offset);
@@ -848,6 +846,7 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     }
     lock_release(&ft->owners_lock);
 
+    /* Update frame metadata to reflect new page */
     spt = spt_find_entry(t, uaddr);
     list_push_back(&ft->owners, &spt->frame_elem);
     ft->reference_bit = 1;
@@ -863,7 +862,7 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     }
   }
 
-  /* sets loaded page's frame table to the found frame table */
+  /* Sets loaded page's frame table to the found frame table */
   spt->ft = ft;
   ft->pinned = false;
 
