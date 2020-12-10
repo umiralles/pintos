@@ -6,6 +6,7 @@
 #include "threads/synch.h"
 #include "devices/block.h"
 #include "filesys/file.h"
+#include "vm/frame.h"
 
 /* Swap table */
 struct bitmap *swap_table;
@@ -36,27 +37,31 @@ void remove_swap_space(size_t start, size_t cnt) {
    Takes the frame to write and the start sector to write to
    MUST ACQUIRE THE SWAP TABLE LOCK BEFORE CALLING */
 void swap_write_frame(void *frame, size_t start) {
-  struct block *b = block_get_role(BLOCK_SWAP); 
+  struct block *b = block_get_role(BLOCK_SWAP);
+  ft_pin(frame, PGSIZE);
   for (block_sector_t i = start; i < start + PGSIZE / BLOCK_SECTOR_SIZE; i++) {
     block_write(b, i, (frame + (i - start) * BLOCK_SECTOR_SIZE));
   }
+  ft_unpin(frame, PGSIZE);
 }
 
 /* Reads a page of data into a frame from the swap space 
    Takes the frame to write to and the start sector to read from
    MUST ACQUIRE THE SWAP TABLE LOCK BEFORE CALLING */
 void swap_read_frame(void *frame, size_t start) {
-  struct block *b = block_get_role(BLOCK_SWAP); 
+  struct block *b = block_get_role(BLOCK_SWAP);
+  ft_pin(frame, PGSIZE);
   for (block_sector_t i = start; i < start + PGSIZE / BLOCK_SECTOR_SIZE; i++) {
     block_read(b, i, (frame + (i - start) * BLOCK_SECTOR_SIZE));
   }
+  ft_unpin(frame, PGSIZE);
 }
 
 /* Reads a page of data from swap space into a given file 
    Takes a file to write into and a sector index to read from
    MUST ACQUIRE THE FILESYS AND SWAP TABLE LOCKS BEFORE CALLING */
 void swap_read_file(struct file *file, size_t start, size_t read_bytes){
-  void *buffer = malloc(BLOCK_SECTOR_SIZE);
+  uint8_t *buffer[BLOCK_SECTOR_SIZE];
   struct block *b = block_get_role(BLOCK_SWAP);
   block_sector_t i;
   for (i = start; i < start + read_bytes / BLOCK_SECTOR_SIZE; i++) {
@@ -65,7 +70,6 @@ void swap_read_file(struct file *file, size_t start, size_t read_bytes){
   }
   block_read(b, i, buffer);
   file_write(file, buffer, read_bytes % BLOCK_SECTOR_SIZE);
-  free(buffer);
 }
 
 /* Acquire the swap table lock */

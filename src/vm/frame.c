@@ -135,12 +135,24 @@ struct frame_table_entry *ft_get_victim(void) {
   while (!victim_found && hash_next(&iterator)) {
     cur = hash_cur(&iterator);
     ft = hash_entry(cur, struct frame_table_entry, elem);
-    victim_found = !ft->reference_bit;
+    victim_found = !ft->reference_bit && !ft->pinned;
   }
 
   if (!victim_found) {
     hash_first(&iterator, &frame_table);
-    return hash_entry(hash_next(&iterator), struct frame_table_entry, elem);
+
+    while (!victim_found && hash_next(&iterator)) {
+      cur = hash_cur(&iterator);
+      ft = hash_entry(cur, struct frame_table_entry, elem);
+      victim_found = !ft->pinned;
+    }
+
+    /* All frames are pinned, swap cannot happen */
+    if (!victim_found) {
+      ft_lock_release();
+      thread_exit();
+    }
+    return hash_entry(cur, struct frame_table_entry, elem);
   } else {
     return ft;
   }

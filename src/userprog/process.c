@@ -802,7 +802,9 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     ft_insert_entry(&ft->elem);
     ft_lock_release();
   } else {
+    ft_lock_acquire();
     ft = ft_get_victim();
+    ft_lock_release();
     ASSERT(ft != NULL);
     // for all owners pagedir_clear_page and update spt
     // and put the page into swap or filesys
@@ -863,6 +865,7 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
 
   /* sets loaded page's frame table to the found frame table */
   spt->ft = ft;
+  ft->pinned = false;
 
   /* Updates type if new stack page loaded, 
      adds shared table entry for read only files */

@@ -277,9 +277,11 @@ static void syscall_write(struct intr_frame *f) {
     struct file_elem *file_elem = get_file(t, fd);
 
     if (file_elem != NULL) {
+      ft_pin(buffer, size);
       lock_acquire(&filesys_lock);
       bytes_written = file_write(file_elem->file, buffer, (off_t) size);
       lock_release(&filesys_lock);
+      ft_pin(buffer, size);
     }
   }
   
