@@ -147,7 +147,8 @@ static void spt_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
   
   if(ft != NULL) {
     /* If page is a modified file in frame, read it back to the file */
-    if(spt->type == IN_SWAP_FILE || (spt->type == ZERO_PAGE && ft->modified)) {
+    if(ft->modified &&
+       (spt->type == FILE_PAGE || spt->type == ZERO_PAGE)) {
       filesys_lock_acquire();
       file_seek(spt->file, spt->offset);
       file_write(spt->file, ft->frame, PGSIZE);
@@ -170,13 +171,14 @@ static void spt_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
       file_seek(spt->file, spt->offset);
       
       swap_lock_acquire();
-      swap_read_file(spt->file, spt->block_number);
+      swap_read_file(spt->file, spt->block_number, spt->read_bytes);
       swap_lock_release();
 
       filesys_lock_release();
     }
     
-    if (spt->type == IN_SWAP_FILE || spt->type == STACK_PAGE) {
+    if (spt->type == IN_SWAP_FILE || spt->type == STACK_PAGE
+	|| (spt->type == MMAPPED_PAGE && spt->modified)) {
       swap_lock_acquire();
       remove_swap_space(spt->block_number, 1);
       swap_lock_release();

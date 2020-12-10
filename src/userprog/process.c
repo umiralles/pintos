@@ -818,37 +818,57 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     ft_insert_entry(&ft->elem);
     ft_lock_release();
   } else {
-    PANIC("Out of memory");
     ft = ft_get_first();
+    ASSERT(ft != NULL);
     // for all owners pagedir_clear_page and update spt
     // and put the page into swap or filesys
     struct list_elem *e;
-    struct thread *t;
     struct sup_table_entry *spt;
+
+    lock_acquire(&ft->owners_lock);
     while(!list_empty(&ft->owners)) {
       e = list_pop_front(&ft->owners);
       spt = list_entry(e, struct sup_table_entry, frame_elem);
       if(spt->ft == NULL) {
         PANIC("Invalid type in frame");
       }
-      if(spt->writable && ft->modified) {
+      if(spt->writable && pagedir_is_dirty(spt->owner->pagedir, spt->upage)) {
         //put in swap
 	swap_lock_acquire();
 	size_t start = find_swap_space(1);
+	if (start == BITMAP_ERROR) {
+	  lock_release(&ft->owners_lock);
+	  swap_lock_release();
+	  thread_exit();
+	}
 	swap_write_frame(ft->frame, start);	
 	swap_lock_release();
+	spt->block_number = start;
         if(spt->type == ZERO_PAGE || spt->type == FILE_PAGE) {
 	  spt->type = IN_SWAP_FILE;
 	}
+	spt->modified = true;
       }
       spt->ft = NULL;
       pagedir_clear_page(spt->owner->pagedir, spt->upage);
     }
+    lock_release(&ft->owners_lock);
+
     spt = spt_find_entry(t, uaddr);
     list_push_back(&ft->owners, &spt->frame_elem);
     ft->reference_bit = 1;
     ft->writable = spt->writable;
     ft->modified = spt->modified;
+    memset(ft->frame, 0, PGSIZE);
+
+    spt->ft = ft;
+
+    kpage = ft->frame;
+    bool success = install_page(spt->upage, kpage, spt->writable);
+    if (!success) {
+      palloc_free_page(kpage);
+      PANIC("Evicted installaton fails");
+    }
   }
 
   return kpage;

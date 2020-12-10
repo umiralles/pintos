@@ -193,11 +193,6 @@ pagedir_set_dirty (uint32_t *pd, const void *vpage, bool dirty)
           *pte &= ~(uint32_t) PTE_D;
           invalidate_pagedir (pd);
         }
-
-      struct frame_table_entry *ft = ft_find_entry(vpage);
-      if (ft != NULL) {
-	ft->modified = true;
-      }
     }
 }
 

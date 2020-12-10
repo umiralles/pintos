@@ -123,6 +123,9 @@ struct shared_table_entry *st_find_entry(const struct file *file,
 struct frame_table_entry *ft_get_first(void) {
   struct hash_iterator iterator;
   hash_first(&iterator, &frame_table);
+  if (hash_next(&iterator) == NULL) {
+    return NULL;
+  }
   struct hash_elem *cur = hash_cur(&iterator);
   return hash_entry(cur, struct frame_table_entry, elem);
 }

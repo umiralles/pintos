@@ -14,6 +14,7 @@
 #include "threads/synch.h"
 #include "vm/page.h"
 #include "vm/frame.h"
+#include "vm/swap.h"
 
 #define MAX_PUSH_SIZE (32)
 #define MAX_STACK_PAGES (2048)
@@ -26,8 +27,8 @@ static void page_fault (struct intr_frame *);
 
 /* HELPER FUNCTIONS */
 static void exception_exit(struct intr_frame *);
-static bool file_to_frame(const struct sup_table_entry *, void *);
-static bool stack_to_frame(const struct sup_table_entry *spt, void *frame);
+static bool file_to_frame(struct sup_table_entry *, void *);
+static void swap_to_frame(struct sup_table_entry *, void *);
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -210,12 +211,12 @@ page_fault (struct intr_frame *f)
 
     /* Allocate physical memory to map to the fault_addr */
     switch(spt->type) {
-      case NEW_STACK_PAGE:	
+      case NEW_STACK_PAGE:
+	frame = allocate_user_page(fault_addr, PAL_ZERO, spt->writable);
+	break;
       case STACK_PAGE:
 	frame = allocate_user_page(fault_addr, PAL_ZERO, spt->writable);
-	if(!stack_to_frame(spt, frame)) {
-          exception_exit(f);
-	}
+	swap_to_frame(spt, frame);
 	break;
 
       case MMAPPED_PAGE:
@@ -287,7 +288,7 @@ static void exception_exit(struct intr_frame *f) {
   thread_exit();
 }
 
-static bool file_to_frame(const struct sup_table_entry *spt, void *frame) {
+static bool file_to_frame(struct sup_table_entry *spt, void *frame) {
   
   //check if file is null/ mapid is -1
   //if both true - return false
@@ -304,10 +305,19 @@ static bool file_to_frame(const struct sup_table_entry *spt, void *frame) {
     return false;
   }
   
-  //memset(frame + bytes_read, 0, PGSIZE - bytes_read);
+  memset(frame + bytes_read, 0, PGSIZE - bytes_read);
   return true;
 }
 
-static bool stack_to_frame(const struct sup_table_entry *spt, void *frame) {
-  return true;  
+static void swap_to_frame(struct sup_table_entry *spt, void *frame) {
+  bool lock_held = swap_lock_held_by_current_thread();
+
+  if(spt->type == IN_SWAP_FILE) {
+    spt->type = FILE_PAGE;
+  }
+
+  run_if_false(swap_lock_acquire(), lock_held);
+  swap_read_frame(frame, spt->block_number);
+  remove_swap_space(spt->block_number, 1);
+  run_if_false(swap_lock_release(), lock_held);
 }

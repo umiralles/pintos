@@ -12,8 +12,7 @@ struct bitmap *swap_table;
 static struct lock swap_table_lock;
 
 void swap_init() {
-  swap_table = bitmap_create(block_size(
-                          block_get_role(BLOCK_SWAP)) / BLOCK_SECTOR_SIZE);
+  swap_table = bitmap_create(block_size(block_get_role(BLOCK_SWAP)));
   lock_init(&swap_table_lock);
 }
 
@@ -22,7 +21,7 @@ void swap_init() {
    MUST ACQUIRE THE SWAP TABLE LOCK BEFORE CALLING */
 size_t find_swap_space(size_t cnt) {
   return bitmap_scan_and_flip(swap_table, 0,
-		  cnt * PGSIZE / BLOCK_SECTOR_SIZE, true);
+		  cnt * PGSIZE / BLOCK_SECTOR_SIZE, false);
 }
 
 /* Frees space for cnt pages starting from sector index start
@@ -39,7 +38,7 @@ void remove_swap_space(size_t start, size_t cnt) {
 void swap_write_frame(void *frame, size_t start) {
   struct block *b = block_get_role(BLOCK_SWAP); 
   for (block_sector_t i = start; i < start + PGSIZE / BLOCK_SECTOR_SIZE; i++) {
-    block_write(b, i, (frame + i * BLOCK_SECTOR_SIZE));
+    block_write(b, i, (frame + (i - start) * BLOCK_SECTOR_SIZE));
   }
 }
 
@@ -49,20 +48,23 @@ void swap_write_frame(void *frame, size_t start) {
 void swap_read_frame(void *frame, size_t start) {
   struct block *b = block_get_role(BLOCK_SWAP); 
   for (block_sector_t i = start; i < start + PGSIZE / BLOCK_SECTOR_SIZE; i++) {
-    block_read(b, i, (frame + i * BLOCK_SECTOR_SIZE));
+    block_read(b, i, (frame + (i - start) * BLOCK_SECTOR_SIZE));
   }
 }
 
 /* Reads a page of data from swap space into a given file 
    Takes a file to write into and a sector index to read from
    MUST ACQUIRE THE FILESYS AND SWAP TABLE LOCKS BEFORE CALLING */
-void swap_read_file(struct file *file, size_t start){
+void swap_read_file(struct file *file, size_t start, size_t read_bytes){
   void *buffer = malloc(BLOCK_SECTOR_SIZE);
   struct block *b = block_get_role(BLOCK_SWAP);
-  for (block_sector_t i = start; i < start + PGSIZE / BLOCK_SECTOR_SIZE; i++) {
-    block_read(b, i, (buffer + i * BLOCK_SECTOR_SIZE));
+  block_sector_t i;
+  for (i = start; i < start + read_bytes / BLOCK_SECTOR_SIZE; i++) {
+    block_read(b, i, buffer);
     file_write(file, buffer, BLOCK_SECTOR_SIZE);
   }
+  block_read(b, i, buffer);
+  file_write(file, buffer, read_bytes % BLOCK_SECTOR_SIZE);
   free(buffer);
 }
 
@@ -75,3 +77,9 @@ void swap_lock_acquire(void) {
 void swap_lock_release(void) {
   lock_release(&swap_table_lock);
 }
+
+/* Check if current thread holds the swap table lock */
+bool swap_lock_held_by_current_thread(void) {
+  return lock_held_by_current_thread(&swap_table_lock);
+}
+
