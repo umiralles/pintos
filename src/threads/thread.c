@@ -257,7 +257,7 @@ thread_create (const char *name, int priority,
     free(t);
     return TID_ERROR;
   }
-  create_alloc_elem((void *) t->tid_elem, MALLOC_PTR);
+  create_alloc_elem(t->tid_elem, MALLOC_PTR);
   
   t->tid_elem->tid = tid;
   t->tid_elem->exit_status = -1;
@@ -266,7 +266,7 @@ thread_create (const char *name, int priority,
   sema_init(&t->tid_elem->child_semaphore, 0);
   lock_init(&t->tid_elem->tid_elem_lock);
   list_push_back(&thread_current()->child_tid_list, &t->tid_elem->elem);
-  remove_alloc_elem((void *) t->tid_elem);
+  remove_alloc_elem(t->tid_elem);
 
   /* Initialise hash tables for the thread struct */
   spt_init(&t->sup_table);
@@ -303,10 +303,9 @@ thread_create (const char *name, int priority,
   sf->ebp = 0;
 
   intr_set_level (old_level);
-
-  remove_alloc_elem((void *) aux);
   
   /* Add to run queue. */
+  remove_alloc_elem(aux);
   remove_alloc_elem(t);
   thread_unblock (t);
 

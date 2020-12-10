@@ -48,7 +48,7 @@ process_execute (const char *file_name)
   fn_copy = palloc_get_page (0);
   if(fn_copy == NULL)
     return TID_ERROR;
-  create_alloc_elem((void *) fn_copy, PALLOC_PTR);
+  create_alloc_elem(fn_copy, PALLOC_PTR);
   
   strlcpy(fn_copy, file_name, PGSIZE);
   
@@ -56,7 +56,7 @@ process_execute (const char *file_name)
   tid = thread_create(file_name, PRI_DEFAULT, start_process, fn_copy);
  
   if(tid == TID_ERROR) {
-    remove_alloc_elem((void *) fn_copy);
+    remove_alloc_elem(fn_copy);
     palloc_free_page(fn_copy);
   }
 
@@ -115,7 +115,7 @@ start_process (void *file_name_)
     sema_up(&thread_current()->tid_elem->child_semaphore);
     thread_exit();
   }
-  create_alloc_elem((void *) arg_page, PALLOC_PTR);
+  create_alloc_elem(arg_page, PALLOC_PTR);
 
   char *token;
   next_arg_location = arg_page;
@@ -134,7 +134,7 @@ start_process (void *file_name_)
       
       thread_exit();
     }
-    create_alloc_elem((void *) current_arg, MALLOC_PTR);
+    create_alloc_elem(current_arg, MALLOC_PTR);
         
     current_arg->arg = next_arg_location;    
     strlcpy(current_arg->arg, token, PGSIZE);
@@ -155,7 +155,7 @@ start_process (void *file_name_)
   success = load (arg1, &if_.eip, &if_.esp);
   
   /* If load failed, quit. */
-  remove_alloc_elem((void *) file_name);
+  remove_alloc_elem(file_name);
   palloc_free_page (file_name);
   
   if(!success) {
@@ -582,7 +582,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
                   read_bytes = 0;
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
-              if (!load_segment (file, file_page, (void *) mem_page,
+              if (!load_segment (file, file_page, (void *)  mem_page,
                                  read_bytes, zero_bytes, writable))
                 goto done;
             }
@@ -782,23 +782,23 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
   void *kpage = palloc_get_page(PAL_USER | flags);
 
   if(kpage != NULL) {
-    create_alloc_elem((void *) kpage, PALLOC_PTR);
+    create_alloc_elem(kpage, PALLOC_PTR);
     bool success = install_page(uaddr, kpage, writable);
     
     //TODO: add eviction in null case
     if(!success) {
-      remove_alloc_elem((void *) kpage);
+      remove_alloc_elem(kpage);
       palloc_free_page(kpage);
       PANIC("OUT OF FRAMES");
     }
     
     struct frame_table_entry *ft = malloc(sizeof(struct frame_table_entry));
     if(ft == NULL) {
-      remove_alloc_elem((void *) kpage);
+      remove_alloc_elem(kpage);
       palloc_free_page(kpage);
       thread_exit(); //may have to be handled in a diff way!!!
     }
-    create_alloc_elem((void *) ft, MALLOC_PTR);
+    create_alloc_elem(ft, MALLOC_PTR);
        
     ft->frame = kpage;
     ft->timestamp = timer_ticks();
@@ -830,7 +830,7 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
       if (st == NULL) {
 	thread_exit();
       }
-      create_alloc_elem((void *) st, MALLOC_PTR);
+      create_alloc_elem(st, MALLOC_PTR);
       
       st->ft = ft;
       st->file = spt->file;
@@ -838,15 +838,15 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
 
       st_lock_acquire();
       st_insert_entry(&st->elem);
-      remove_alloc_elem((void *) st);
+      remove_alloc_elem(st);
       st_lock_release();
     }
 
     // not sure if this needs to be acquired earlier?
     ft_lock_acquire();
     ft_insert_entry(&ft->elem);
-    remove_alloc_elem((void *) ft);
-    remove_alloc_elem((void *) kpage);
+    remove_alloc_elem(ft);
+    remove_alloc_elem(kpage);
     ft_lock_release();
   } else {
     PANIC("Out of memory");
