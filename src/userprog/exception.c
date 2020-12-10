@@ -210,7 +210,6 @@ page_fault (struct intr_frame *f)
 
     /* Allocate physical memory to map to the fault_addr */
     switch(spt->type) {
-      case ZERO_PAGE:
       case NEW_STACK_PAGE:	
       case STACK_PAGE:
 	frame = allocate_user_page(fault_addr, PAL_ZERO, spt->writable);
@@ -226,6 +225,7 @@ page_fault (struct intr_frame *f)
 	}
 	break;
 	
+      case ZERO_PAGE:
       case FILE_PAGE:
 	if(spt->writable) {
 	  frame = allocate_user_page(fault_addr, PAL_USER, spt->writable);
@@ -248,27 +248,6 @@ page_fault (struct intr_frame *f)
 	  if(!file_to_frame(spt, frame)) {
 	    exception_exit(f);
 	  }
-
-	  st = malloc(sizeof(struct shared_table_entry));
-
-	  if(st == NULL) {
-	    thread_exit();
-	  }
-
-	  lock_held = ft_lock_held_by_current_thread();
-	  
-          run_if_false(ft_lock_acquire(), lock_held);
-	  st->ft = ft_find_entry(frame);
-          run_if_false(ft_lock_release(), lock_held);
-	  
-          st->file = spt->file;
-	  st->offset = spt->offset;
-
-	  lock_held = st_lock_held_by_current_thread();
-	  
-	  run_if_false(st_lock_acquire(), lock_held);
-	  st_insert_entry(&st->elem);
-	  run_if_false(st_lock_release(), lock_held);
       	}
 	break;
 
@@ -325,10 +304,10 @@ static bool file_to_frame(const struct sup_table_entry *spt, void *frame) {
     return false;
   }
   
-  memset(frame + bytes_read, 0, PGSIZE - bytes_read);
+  //memset(frame + bytes_read, 0, PGSIZE - bytes_read);
   return true;
 }
 
 static bool stack_to_frame(const struct sup_table_entry *spt, void *frame) {
-  return false;  
+  return true;  
 }

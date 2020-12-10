@@ -60,7 +60,9 @@ bool create_file_page(void *upage, struct file *file, off_t offset,
   spt->read_bytes = read_bytes;
   spt->ft = NULL;
   spt->upage = pg_round_down(upage);
+  spt->owner = thread_current();
   spt->writable = writable;
+  spt->modified = false;
   spt->type = type;
 	
   hash_insert(&thread_current()->sup_table, &spt->elem);
@@ -77,7 +79,9 @@ void create_stack_page(void *upage) {
   spt->file = NULL;
   spt->offset = 0;
   spt->upage = pg_round_down(upage);
+  spt->owner = thread_current();
   spt->writable = true;
+  spt->modified = false;
   spt->type = NEW_STACK_PAGE;
   spt->ft = NULL;
 
