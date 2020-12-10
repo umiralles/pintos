@@ -224,8 +224,12 @@ page_fault (struct intr_frame *f)
 
       case MMAPPED_PAGE:
 	frame = allocate_user_page(fault_addr, PAL_USER, spt->writable);
-	if(!file_to_frame(spt, frame)) {
-	  exception_exit(f);
+	if(spt->modified) {
+	  swap_to_frame(spt, frame);
+	} else {
+	  if(!file_to_frame(spt, frame)) {
+	    exception_exit(f);
+	  }
 	}
 	break;
 	

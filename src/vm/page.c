@@ -167,13 +167,13 @@ static void spt_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
       filesys_lock_release();
     }
 
-    lock_acquire(&ft->owners_lock);
+    //lock_acquire(&ft->owners_lock);
     list_remove(&spt->frame_elem);
     
     if (list_empty(&ft->owners)) {
       ft_remove_entry(ft->frame);
     } else {
-      lock_release(&ft->owners_lock);
+      //lock_release(&ft->owners_lock);
     }
   } else {
     /* If page in swap system, read it back to its file and free swap space */
