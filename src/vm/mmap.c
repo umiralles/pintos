@@ -13,10 +13,15 @@
 /* Hash functions for mmap_table */
 static hash_hash_func mmap_hash_mapid;
 static hash_less_func mmap_cmp_mapid;
+static hash_action_func mmap_destroy_entry;
 
 /* Initialise sup_table */
 void mmap_init(struct hash *mmap_table) {
   hash_init(mmap_table, mmap_hash_mapid, mmap_cmp_mapid, NULL);
+}
+
+void mmap_destroy(struct hash *mmap_table) {
+  hash_destroy(mmap_table, mmap_destroy_entry);
 }
 
 /* Calculates a hash value based on mmap_entry's identifier */
@@ -117,7 +122,7 @@ void mmap_remove_entry(struct mmap_entry *mmap, bool destroy) {
   free(mmap);
 }
 
-void mmap_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
+static void mmap_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
   struct mmap_entry *mmap = hash_entry(e, struct mmap_entry, elem);
   
   mmap_remove_entry(mmap, true);

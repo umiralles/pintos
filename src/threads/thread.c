@@ -264,10 +264,8 @@ thread_create (const char *name, int priority,
   lock_init(&t->tid_elem->tid_elem_lock);
   list_push_back(&thread_current()->child_tid_list, &t->tid_elem->elem);
 
-  /* Initialise suplemental page table */
+  /* Initialise hash tables for the thread struct */
   spt_init(&t->sup_table);
-
-  /* Initialise memory mapped files table */
   mmap_init(&t->mmap_table);
 
 #endif
@@ -651,9 +649,9 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&t->files);
   t->next_available_fd = STDOUT_FILENO + 1;
   list_init(&t->child_tid_list);
+  list_init(&t->allocated_pointers);
   t->stack_page_cnt = 0;
   t->next_map_id = 0;
-  
 #endif
 
   t->magic = THREAD_MAGIC;

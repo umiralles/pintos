@@ -295,7 +295,21 @@ process_exit (void)
   struct thread *t = thread_current ();
   uint32_t *pd;
 
-  hash_destroy(&t->mmap_table, mmap_destroy_entry);   
+  /* Free all pointers still allocated */
+  if(!list_empty(&t->allocated_pointers)) {
+    struct list_elem *ptr_elem = list_front(&t->allocated_pointers);
+    while(ptr_elem != list_end(&t->allocated_pointers)) {
+      struct pointer_elem *ptr = list_entry(ptr_elem, struct pointer_elem, elem);
+
+      ptr_elem = list_next(ptr_elem);
+      free(ptr->pointer);
+      free(ptr);
+    }
+  }
+  
+  /* Destroy all hash tables in thread struct */
+  //spt_destroy(&t->sup_table);
+  mmap_destroy(&t->mmap_table);
 
   /* Frees all memory associated with open files */
   struct list_elem *current;

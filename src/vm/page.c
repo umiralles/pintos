@@ -192,6 +192,6 @@ static void spt_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
   }
 
   ft_lock_release();
-  
+
   free(spt);
 }
