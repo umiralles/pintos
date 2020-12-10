@@ -214,6 +214,7 @@ page_fault (struct intr_frame *f)
       case NEW_STACK_PAGE:
 	frame = allocate_user_page(fault_addr, PAL_ZERO, spt->writable);
 	break;
+      case IN_SWAP_FILE:	
       case STACK_PAGE:
 	frame = allocate_user_page(fault_addr, PAL_ZERO, spt->writable);
 	swap_to_frame(spt, frame);
