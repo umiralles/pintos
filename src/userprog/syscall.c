@@ -242,9 +242,11 @@ static void syscall_read(struct intr_frame *f) {
   } else {
     struct file_elem *file = get_file(t, fd);
     if(file != NULL) {
+      ft_pin(buffer, size);
       lock_acquire(&filesys_lock);
       bytes_read = (int) file_read(file->file, buffer, (off_t) size);
       lock_release(&filesys_lock);
+      ft_unpin(buffer, size);
     }
   }
 
