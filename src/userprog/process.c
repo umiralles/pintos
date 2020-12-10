@@ -826,31 +826,40 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     struct sup_table_entry *spt;
 
     lock_acquire(&ft->owners_lock);
-    while(!list_empty(&ft->owners)) {
+    if(ft->writable) {
+      // only one owner
       e = list_pop_front(&ft->owners);
       spt = list_entry(e, struct sup_table_entry, frame_elem);
-      if(spt->ft == NULL) {
-        PANIC("Invalid type in frame");
-      }
-      if(spt->writable && pagedir_is_dirty(spt->owner->pagedir, spt->upage)) {
+      if(pagedir_is_dirty(spt->owner->pagedir, spt->upage)) {
         //put in swap
-	swap_lock_acquire();
-	size_t start = find_swap_space(1);
-	if (start == BITMAP_ERROR) {
-	  lock_release(&ft->owners_lock);
-	  swap_lock_release();
-	  thread_exit();
-	}
-	swap_write_frame(ft->frame, start);	
-	swap_lock_release();
-	spt->block_number = start;
+        swap_lock_acquire();
+        size_t start = find_swap_space(1);
+        if (start == BITMAP_ERROR) {
+          lock_release(&ft->owners_lock);
+          swap_lock_release();
+          thread_exit();
+        }
+        swap_write_frame(ft->frame, start);
+        swap_lock_release();
+        spt->block_number = start;
         if(spt->type == ZERO_PAGE || spt->type == FILE_PAGE) {
-	  spt->type = IN_SWAP_FILE;
-	}
-	spt->modified = true;
+          spt->type = IN_SWAP_FILE;
+        }
+        spt->modified = true;
+	spt->ft = NULL;
+	pagedir_clear_page(spt->owner->pagedir, spt->upage);
       }
-      spt->ft = NULL;
-      pagedir_clear_page(spt->owner->pagedir, spt->upage);
+    } else {
+      // can have multiple owners
+      e = list_pop_front(&ft->owners);
+      spt = list_entry(e, struct sup_table_entry, frame_elem);
+      st_remove_entry(spt->file, spt->offset);
+      while(!list_empty(&ft->owners)) {
+        spt->ft = NULL;
+	pagedir_clear_page(spt->owner->pagedir, spt->upage);
+        e = list_pop_front(&ft->owners);
+        spt = list_entry(e, struct sup_table_entry, frame_elem);
+      }
     }
     lock_release(&ft->owners_lock);
 

@@ -20,14 +20,15 @@ struct shared_table_entry {
 
 /* Single row of the frame table */
 struct frame_table_entry {
-  void *frame;             /* frame of memory that the data corresponds to */
-  struct list owners;      /* sup table entries which the page belongs to */
+  void *frame;             /* Frame of memory that the data corresponds to */
+  struct list owners;      /* The sup table entries which the page belongs to */
   struct lock owners_lock; /* Restricts access to owners list */
-  int64_t timestamp;       /* time the frame was allocated in ticks */
-  struct hash_elem elem;   /* used to insert into the table */
-  bool reference_bit;      /* used for second chance algorithm calculations */
-  bool modified;           /* states whether the frame has been modified */
-  bool writable;           /* whether the thread can be written to or not */
+  int64_t timestamp;       /* Time the frame was allocated in ticks */
+  struct hash_elem elem;   /* Used to insert into the table */
+  bool reference_bit;      /* Used for second chance algorithm calculations */
+  bool modified;           /* States whether the frame has been modified */
+  bool writable;           /* Whether the thread can be written to or not */
+  bool pinned;		   /* True if frame is not able to be evicted */
 };
 
 /* Initialise frame_table */
@@ -56,4 +57,6 @@ void st_lock_acquire(void);
 void st_lock_release(void);
 bool st_lock_held_by_current_thread(void);
 
+void ft_pin(void *uaddr, unsigned size);
+void ft_unpin(void *uaddr, unsigned size);
 #endif

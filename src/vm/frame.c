@@ -138,7 +138,7 @@ struct frame_table_entry *ft_get_first(void) {
 void ft_remove_entry(void *frame) {
   struct frame_table_entry *ft = ft_find_entry(frame);
   
-  ASSERT(lock_held_by_current_thread(&ft->owners_lock));
+  //ASSERT(lock_held_by_current_thread(&ft->owners_lock));
   
   if(ft != NULL) {
     struct hash_iterator iterator;
@@ -158,7 +158,7 @@ void ft_remove_entry(void *frame) {
     }
     st_lock_release(); 
     hash_delete(&frame_table, &ft->elem);
-    lock_release(&ft->owners_lock);
+    //lock_release(&ft->owners_lock);
     free(ft);
   }
 }
@@ -200,4 +200,29 @@ void st_lock_release(void) {
 
 bool st_lock_held_by_current_thread(void) {
   return lock_held_by_current_thread(&shared_table_lock);
+}
+
+void ft_pin(void *uaddr, unsigned size) {
+  struct sup_table_entry *spt;
+  while(size > PGSIZE) {
+    spt = spt_find_entry(thread_current(), uaddr);
+    if(spt == NULL) {
+      thread_exit();
+    }
+    spt->ft->pinned = true;
+    uaddr += PGSIZE;
+    size -= PGSIZE;
+  }
+}
+void ft_unpin(void *uaddr, unsigned size) {
+  struct sup_table_entry *spt;
+  while(size > PGSIZE) {
+    spt = spt_find_entry(thread_current(), uaddr);
+    if(spt == NULL) {
+      thread_exit();
+    }
+    spt->ft->pinned = false;
+    uaddr += PGSIZE;
+    size -= PGSIZE;
+  }
 }
