@@ -48,7 +48,7 @@ process_execute (const char *file_name)
   fn_copy = palloc_get_page (0);
   if(fn_copy == NULL)
     return TID_ERROR;
-  create_alloc_elem((void *) fn_copy, true);
+  create_alloc_elem((void *) fn_copy, PALLOC_PTR);
   
   strlcpy(fn_copy, file_name, PGSIZE);
   
@@ -115,7 +115,7 @@ start_process (void *file_name_)
     sema_up(&thread_current()->tid_elem->child_semaphore);
     thread_exit();
   }
-  create_alloc_elem((void *) arg_page, true);
+  create_alloc_elem((void *) arg_page, PALLOC_PTR);
 
   char *token;
   next_arg_location = arg_page;
@@ -134,7 +134,7 @@ start_process (void *file_name_)
       
       thread_exit();
     }
-    create_alloc_elem((void *) current_arg, false);
+    create_alloc_elem((void *) current_arg, MALLOC_PTR);
         
     current_arg->arg = next_arg_location;    
     strlcpy(current_arg->arg, token, PGSIZE);
@@ -310,7 +310,7 @@ process_exit (void)
 
       ptr_elem = list_next(ptr_elem);
 
-      if(ptr->palloc) {
+      if(ptr->palloc == PALLOC_PTR) {
 	palloc_free_page(ptr->pointer);
       } else {
 	free(ptr->pointer);
@@ -782,7 +782,7 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
   void *kpage = palloc_get_page(PAL_USER | flags);
 
   if(kpage != NULL) {
-    create_alloc_elem((void *) kpage, true);
+    create_alloc_elem((void *) kpage, PALLOC_PTR);
     bool success = install_page(uaddr, kpage, writable);
     
     //TODO: add eviction in null case
@@ -798,7 +798,7 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
       palloc_free_page(kpage);
       thread_exit(); //may have to be handled in a diff way!!!
     }
-    create_alloc_elem((void *) ft, false);
+    create_alloc_elem((void *) ft, MALLOC_PTR);
        
     ft->frame = kpage;
     ft->timestamp = timer_ticks();
@@ -830,7 +830,7 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
       if (st == NULL) {
 	thread_exit();
       }
-      create_alloc_elem((void *) st, false);
+      create_alloc_elem((void *) st, MALLOC_PTR);
       
       st->ft = ft;
       st->file = spt->file;

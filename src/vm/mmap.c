@@ -48,7 +48,7 @@ mapid_t mmap_create_entry(struct file *file, void *addr) {
   if(mmap_entry == NULL) {
     return ERROR_CODE;
   }
-  create_alloc_elem(mmap_entry, false);
+  create_alloc_elem(mmap_entry, MALLOC_PTR);
 
   struct thread *t = thread_current();
   

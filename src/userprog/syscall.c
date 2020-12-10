@@ -177,7 +177,7 @@ static void syscall_open(struct intr_frame *f) {
 	lock_release(&filesys_lock);
 	thread_exit();
       }
-      create_alloc_elem(current_file, false);
+      create_alloc_elem(current_file, MALLOC_PTR);
       
       fd = t->next_available_fd;
       t->next_available_fd++;

@@ -67,7 +67,7 @@ bool create_file_page(void *upage, struct file *file, off_t offset,
   if(spt == NULL) {
     return false;
   }
-  create_alloc_elem(spt, false);
+  create_alloc_elem(spt, MALLOC_PTR);
 
   spt->file = file;
   spt->offset = offset;
@@ -88,7 +88,7 @@ void create_stack_page(void *upage) {
   if(spt == NULL) {
     thread_exit();
   }
-  create_alloc_elem(spt, false);
+  create_alloc_elem(spt, MALLOC_PTR);
   
   spt->file = NULL;
   spt->offset = 0;

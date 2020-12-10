@@ -7,6 +7,9 @@
 #include "vm/frame.h"
 #include "vm/page.h"
 
+#define PALLOC_PTR (true)
+#define MALLOC_PTR (false)
+
 /* Element to store a pointer (used for allocated_pointers list) */
 struct pointer_elem {
   void *pointer;                      /* Pointer to be freed on exit */

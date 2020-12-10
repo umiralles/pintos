@@ -240,7 +240,7 @@ thread_create (const char *name, int priority,
   t = palloc_get_page (PAL_ZERO);
   if (t == NULL)
     return TID_ERROR;
-  create_alloc_elem(t, true);
+  create_alloc_elem(t, PALLOC_PTR);
   
   /* Initialize thread. */
   init_thread (t, name, priority);
@@ -257,7 +257,7 @@ thread_create (const char *name, int priority,
     free(t);
     return TID_ERROR;
   }
-  create_alloc_elem((void *) t->tid_elem, false);
+  create_alloc_elem((void *) t->tid_elem, MALLOC_PTR);
   
   t->tid_elem->tid = tid;
   t->tid_elem->exit_status = -1;
