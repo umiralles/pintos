@@ -39,7 +39,7 @@ void spt_init(struct hash *);
 bool create_file_page(void *, struct file *, off_t, bool, size_t,
 		      enum sup_entry_type);	      
 void create_stack_page(void *);
-struct sup_table_entry *spt_find_entry(struct thread *, void *);
+struct sup_table_entry *spt_find_entry(struct thread *, const void *);
 void spt_remove_entry(void *);
 void spt_destroy(struct hash *);
 

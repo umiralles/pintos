@@ -18,14 +18,15 @@ void spt_init(struct hash *sup_table) {
   hash_init(sup_table, spt_hash_uaddr, spt_cmp_uaddr, NULL);
 }
 
+/* Destroys entire supplemental page table */
 void spt_destroy(struct hash *sup_table) {
   hash_destroy(sup_table, spt_destroy_entry);
 }
 
-/* Gets a user page to be written to swap space on eviction
-   Creates sup_table_entry for it
-   Takes user page pointer, file pointer, offset within file
-   and whether file is writable */
+/* Creates a supplemental page table for a file page
+   Takes the user virtual address, file, file offset, whether it is writable,
+   the number of bytes to read and its page type 
+   Returns false if memory allocation fails or duplicate MMAP created */
 bool create_file_page(void *upage, struct file *file, off_t offset,
 		      bool writable, size_t read_bytes,
 		      enum sup_entry_type type) {
@@ -61,6 +62,7 @@ bool create_file_page(void *upage, struct file *file, off_t offset,
     return true;
   }
 
+  /* Creates new table entry with given values if one cannot be found */
   spt = malloc(sizeof(struct sup_table_entry));
 
   if(spt == NULL) {
@@ -82,6 +84,8 @@ bool create_file_page(void *upage, struct file *file, off_t offset,
   return true;
 }
 
+/* Creates a supplemental page table for a stack page
+   Takes the user virtual address of the stack page */
 void create_stack_page(void *upage) {
   struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));  
   if(spt == NULL) {
@@ -102,24 +106,24 @@ void create_stack_page(void *upage) {
 
 /* Calculates a hash value based on user page address of e */
 static unsigned spt_hash_uaddr(const struct hash_elem *e, void *aux UNUSED) {
-  struct sup_table_entry *st = hash_entry(e, struct sup_table_entry, elem);
+  struct sup_table_entry *spt = hash_entry(e, struct sup_table_entry, elem);
   
-  return (unsigned) st->upage / PGSIZE;
+  return hash_int((int) spt->upage);
 }
 
 /* Compares entries on numerical value of user page address */ 
 static bool spt_cmp_uaddr(const struct hash_elem *a, const struct hash_elem *b,
 		   void *aux UNUSED) {
-  struct sup_table_entry *st1 = hash_entry(a, struct sup_table_entry, elem);
-  struct sup_table_entry *st2 = hash_entry(b, struct sup_table_entry, elem);
+  struct sup_table_entry *spt1 = hash_entry(a, struct sup_table_entry, elem);
+  struct sup_table_entry *spt2 = hash_entry(b, struct sup_table_entry, elem);
   
-  return st1->upage < st2->upage;
+  return spt1->upage < spt2->upage;
 }
 
 /* Finds entry corresponding to a given page in the supplemental page table 
    Takes in a thread with sup_table to search and a user page to search for 
    Returns the page entry struct if found or NULL otherwise */
-struct sup_table_entry *spt_find_entry(struct thread *t, void *uaddr) {
+struct sup_table_entry *spt_find_entry(struct thread *t, const void *uaddr) {
   struct sup_table_entry key;
   key.upage = pg_round_down(uaddr);
   
@@ -167,6 +171,7 @@ static void spt_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
       filesys_lock_release();
     }
 
+    /* Remove self from frame's owners list and free if it has no owners */
     //lock_acquire(&ft->owners_lock);
     list_remove(&spt->frame_elem);
     
@@ -189,6 +194,7 @@ static void spt_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
       filesys_lock_release();
     }
     
+    /* Clear swap space if page is found in swap space */
     if (spt->type == IN_SWAP_FILE || spt->type == STACK_PAGE
 	|| (spt->type == MMAPPED_PAGE && spt->modified)) {
       swap_lock_acquire();

@@ -138,6 +138,7 @@ struct frame_table_entry *ft_get_victim(void) {
     victim_found = !ft->reference_bit && !ft->pinned;
   }
 
+  /* Now check again for any unpinned page */
   if (!victim_found) {
     hash_first(&iterator, &frame_table);
 
@@ -242,7 +243,9 @@ bool st_lock_held_by_current_thread(void) {
   return lock_held_by_current_thread(&shared_table_lock);
 }
 
-void ft_pin(void *uaddr, unsigned size) {
+/* Pins a buffer at uaddr of size size so its frames cannot be evicted 
+   Takes the start address of the buffer and its size */
+void ft_pin(const void *uaddr, unsigned size) {
   struct sup_table_entry *spt;
   while(size > PGSIZE) {
     spt = spt_find_entry(thread_current(), uaddr);
@@ -254,7 +257,10 @@ void ft_pin(void *uaddr, unsigned size) {
     size -= PGSIZE;
   }
 }
-void ft_unpin(void *uaddr, unsigned size) {
+
+/* Unpins a buffer at uaddr of size size so its frames can be evicted 
+   Takes the start address of the buffer and its size */
+void ft_unpin(const void *uaddr, unsigned size) {
   struct sup_table_entry *spt;
   while(size > PGSIZE) {
     spt = spt_find_entry(thread_current(), uaddr);

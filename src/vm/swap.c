@@ -12,6 +12,7 @@
 struct bitmap *swap_table;
 static struct lock swap_table_lock;
 
+/* Initialises swap table and swap lock */
 void swap_init() {
   swap_table = bitmap_create(block_size(block_get_role(BLOCK_SWAP)));
   lock_init(&swap_table_lock);
@@ -38,6 +39,7 @@ void remove_swap_space(size_t start, size_t cnt) {
    MUST ACQUIRE THE SWAP TABLE LOCK BEFORE CALLING */
 void swap_write_frame(void *frame, size_t start) {
   struct block *b = block_get_role(BLOCK_SWAP);
+
   ft_pin(frame, PGSIZE);
   for (block_sector_t i = start; i < start + PGSIZE / BLOCK_SECTOR_SIZE; i++) {
     block_write(b, i, (frame + (i - start) * BLOCK_SECTOR_SIZE));
@@ -64,10 +66,12 @@ void swap_read_file(struct file *file, size_t start, size_t read_bytes){
   uint8_t *buffer[BLOCK_SECTOR_SIZE];
   struct block *b = block_get_role(BLOCK_SWAP);
   block_sector_t i;
+
   for (i = start; i < start + read_bytes / BLOCK_SECTOR_SIZE; i++) {
     block_read(b, i, buffer);
     file_write(file, buffer, BLOCK_SECTOR_SIZE);
   }
+
   block_read(b, i, buffer);
   file_write(file, buffer, read_bytes % BLOCK_SECTOR_SIZE);
 }

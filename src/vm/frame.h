@@ -6,22 +6,18 @@
 #include "filesys/file.h"
 #include "vm/page.h"
 
-struct owners_list_elem {
-  struct sup_table_entry *owner; /* sup_table_entry which owns this frame */
-  struct list_elem elem;         /* Used to insert into frame's owners list */
-};
-
+/* Single row of the shared table */
 struct shared_table_entry {
-  struct frame_table_entry *ft;
-  const struct file *file;
-  off_t offset;
-  struct hash_elem elem;
+  struct frame_table_entry *ft; /* Frame which the file is mapped to */
+  const struct file *file;      /* Read only file that is shared */
+  off_t offset;                 /* Offset of the file segment that is shared */
+  struct hash_elem elem;        /* Used to insert into the table */
 };
 
 /* Single row of the frame table */
 struct frame_table_entry {
   void *frame;             /* Frame of memory that the data corresponds to */
-  struct list owners;      /* The sup table entries which the page belongs to */
+  struct list owners;      /* The sup table entries that the page belongs to */
   struct lock owners_lock; /* Restricts access to owners list */
   int64_t timestamp;       /* Time the frame was allocated in ticks */
   struct hash_elem elem;   /* Used to insert into the table */
@@ -35,20 +31,23 @@ struct frame_table_entry {
 void ft_init(void);
 
 /* Manipulation of frame_table */
-void ft_insert_entry(struct hash_elem *elem);
-struct frame_table_entry *ft_find_entry(const void *frame);
-void ft_remove_entry(void *frame);
+void ft_insert_entry(struct hash_elem *);
+struct frame_table_entry *ft_find_entry(const void *);
+void ft_remove_entry(void *);
+void ft_pin(const void *, unsigned);
+void ft_unpin(const void *, unsigned);
 void ft_reset_reference_bits(void);
 
+/* Page replacement algorithm */
 struct frame_table_entry *ft_get_victim(void);
 
 /* Initialise shared_table */
 void st_init(void);
 
 /* Manipulation of shared table */
-void st_insert_entry(struct hash_elem *elem);
-struct shared_table_entry *st_find_entry(const struct file *file, off_t offset);
-void st_remove_entry(struct file *file, off_t offset);
+void st_insert_entry(struct hash_elem *);
+struct shared_table_entry *st_find_entry(const struct file *, off_t);
+void st_remove_entry(struct file *, off_t);
 
 /* Access functions for locks */
 void ft_lock_acquire(void);
@@ -58,6 +57,4 @@ void st_lock_acquire(void);
 void st_lock_release(void);
 bool st_lock_held_by_current_thread(void);
 
-void ft_pin(void *uaddr, unsigned size);
-void ft_unpin(void *uaddr, unsigned size);
 #endif
