@@ -5,9 +5,8 @@
 #include "filesys/file.h"
 #include "threads/thread.h"
 
+/* Enum to determine the type of virtual page and storage space */
 enum sup_entry_type {
-	// empty stack page, empty file page, r/o file page, writable file page
-	// stack page in swap, stack page in frame
   ZERO_PAGE,               /* Empty file page, either in frame or not stored */
   FILE_PAGE,               /* Data is a file in filesys or frame */
   IN_SWAP_FILE,            /* Data is a file in swap space */
@@ -16,6 +15,7 @@ enum sup_entry_type {
   NEW_STACK_PAGE           /* Empty stack page, not stored */
 };
 
+/* Entry representing a virtual page in the suplemental page table */
 struct sup_table_entry {
   size_t block_number;	        /* Block number of swap space data if present */
   struct file *file;            /* File pointer */
@@ -28,6 +28,7 @@ struct sup_table_entry {
   struct thread *owner;		/* Pointer to thread which owns this sup table */
   bool writable;                /* Whether data is writable */
   bool modified;		/* Whether data was modified */
+  bool accessed;                /* Whether data was accessed */
   bool pinned;                  /* Whether the frame must be pinned on allocation */
   struct hash_elem elem;        /* Used to store in supplemental page table */
   enum sup_entry_type type;     /* Type of entry (see enum above) */

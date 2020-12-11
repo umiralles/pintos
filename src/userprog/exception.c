@@ -143,14 +143,8 @@ page_fault (struct intr_frame *f)
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
 
-  struct sup_table_entry *spt;           /* The entry of this address in the
-					    suplemental page table */
-  struct frame_table_entry *ft;          /* The entry of this address in the
-                                            frame table */
-  void *frame;                           /* The frame of physical memory the
-					    fault_addr accesses */
   struct thread *t = thread_current();   /* The current thread */
-  
+   
   /* Obtain faulting address, the virtual address that was
      accessed to cause the fault.  It may point to code or to
      data.  It is not necessarily the address of the instruction
@@ -172,97 +166,17 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
   
+   //printf("page_fault: %p, %lld \n", fault_addr, page_fault_cnt);		      
   /* Checks for if the page fault happened in a valid case */
-  if(!not_present || !fault_addr || (user && !is_user_vaddr(fault_addr))
+  if(!not_present || !fault_addr
      || pagedir_get_page(t->pagedir, pg_round_down(fault_addr))) {
     exception_exit(f);
   }
 
-  /* If in user access, update the curr_esp in the thread */
-  if(user) {
-    t->curr_esp = f->esp;
-  }
-
-  spt = grow_stack_if_needed(t, fault_addr);
-
-  if (spt == NULL) {
+  if(!load_frame(fault_addr, f->esp, FAULT_ACCESS, user, write)) {
     exception_exit(f);
   }
-
-  // don't know if this is covered by !not_present check
-  if( (write && !spt->writable)) {
-    exception_exit(f);
-  }
-
-  ft = spt->ft;
   
-  /* Check whether a frame_entry has already been allocated */
-  if(ft == NULL) {
-    /* Allocate physical memory to map to the fault_addr */
-    switch(spt->type) {
-      /* Allocate a zero page */
-      case NEW_STACK_PAGE:
-	frame = allocate_user_page(fault_addr, PAL_ZERO, spt->writable);
-	break;
-
-      /* Allocate a zero page to be put the swap space on eviction */
-      case IN_SWAP_FILE:	
-      case STACK_PAGE:
-	frame = allocate_user_page(fault_addr, PAL_ZERO, spt->writable);
-	swap_to_frame(spt, frame);
-	break;
-
-	/* Allocate a user accessable page which, if modified, will be put in the
-	   swap space on eviction */
-      case MMAPPED_PAGE:
-	frame = allocate_user_page(fault_addr, PAL_USER, spt->writable);
-	if(spt->modified) {
-	  swap_to_frame(spt, frame);
-	} else {
-	  if(!file_to_frame(spt, frame)) {
-	    exception_exit(f);
-	  }
-	}
-	break;
-
-      // TODO: needs comment
-      /* */
-      case ZERO_PAGE:
-      case FILE_PAGE:
-	if(spt->writable) {
-	  frame = allocate_user_page(fault_addr, PAL_USER, spt->writable);
-	  if(!file_to_frame(spt, frame)) {
-	    exception_exit(f);
-	  }
-	  break;
-	}
-
-	bool lock_held = st_lock_held_by_current_thread();
-	
-	run_if_false(st_lock_acquire(), lock_held);
-	struct shared_table_entry *st = st_find_entry(spt->file, spt->offset);
-	run_if_false(st_lock_release(), lock_held);
-	
-	if (st != NULL) {
-	  install_shared_page(st, spt);
-	} else {
-	  frame = allocate_user_page(fault_addr, PAL_USER, spt->writable);
-	  if(!file_to_frame(spt, frame)) {
-	    exception_exit(f);
-	  }
-	}
-	break;
-
-      default:
-	//swap to file
-	exception_exit(f);
-    }
-    
-  } else {
-    // only happens in swap
-    exception_exit(f);
-  }
-
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
@@ -296,10 +210,6 @@ static void exception_exit(struct intr_frame *f) {
    Returns false if more data is found than expected */
 static bool file_to_frame(struct sup_table_entry *spt, void *frame) {
   
-  //check if file is null/ mapid is -1
-  //if both true - return false
-  //if mapid - not -1 - call helper func
-
   bool lock_held = filesys_lock_held_by_current_thread();
   
   run_if_false(filesys_lock_acquire(), lock_held);
@@ -331,6 +241,146 @@ static void swap_to_frame(struct sup_table_entry *spt, void *frame) {
   ft_unpin(spt->upage, PGSIZE);
   remove_swap_space(spt->block_number, 1);
   run_if_false(swap_lock_release(), lock_held);
+}
+
+/* Load a frame for a faulting/unloaded address */
+bool load_frame(void *fault_addr, void *esp, bool fault, bool user, bool write) {
+  struct sup_table_entry *spt;           /* The entry of this address in the
+					    suplemental page table */
+  struct frame_table_entry *ft;          /* The entry of this address in the
+                                            frame table */
+  void *frame;                           /* The frame of physical memory the
+					    fault_addr accesses */
+  struct thread *t = thread_current();   /* The current thread */
+  
+  /* Validity checks */
+  if(user && !is_user_vaddr(fault_addr)) {
+    return false;
+  }
+  
+  /* If in user access, update the curr_esp in the thread (to esp from
+     intr_frame) */
+  if(user) {
+    t->curr_esp = esp;
+  }
+
+  /* See if the access is supposed to exist in virtual memory */
+  spt = spt_find_entry(t, fault_addr);
+
+  /* Grow stack if needed */
+  spt = grow_stack(fault_addr, spt);
+
+  if(spt == NULL) {
+    return false;
+  }
+
+  if(fault && (write && !spt->writable)) {
+    return false;
+  }
+
+  pagedir_set_accessed(spt->owner->pagedir, fault_addr, spt->accessed);
+  pagedir_set_dirty(spt->owner->pagedir, fault_addr, spt->modified);
+  ft = spt->ft;
+  
+  /* Check whether a frame_entry has already been allocated */
+  if(ft == NULL) {
+    /* Allocate physical memory to map to the fault_addr */
+    switch(spt->type) {
+      /* Allocate a zero page */
+      case NEW_STACK_PAGE:
+	frame = allocate_user_page(fault_addr, PAL_ZERO, spt->writable);
+	break;
+
+      /* Allocate a zero page to be put the swap space on eviction */
+      case IN_SWAP_FILE:	
+      case STACK_PAGE:
+	frame = allocate_user_page(fault_addr, PAL_ZERO, spt->writable);
+	swap_to_frame(spt, frame);
+	break;
+
+	/* Allocate a user accessable page which, if modified, will be put in the
+	   swap space on eviction */
+      case MMAPPED_PAGE:
+	frame = allocate_user_page(fault_addr, PAL_USER, spt->writable);
+	if(spt->modified) {
+	  swap_to_frame(spt, frame);
+	} else {
+	  if(!file_to_frame(spt, frame)) {
+	    return false;
+	  }
+	}
+	break;
+
+      /* Allocate a user accessable file or zero page which will be put in the swap 
+	 space on eviction if writable */
+      case ZERO_PAGE:
+      case FILE_PAGE:
+	if(spt->writable) {
+	  frame = allocate_user_page(fault_addr, PAL_USER, spt->writable);
+	  if(!file_to_frame(spt, frame)) {
+	    return false;
+	  }
+	  break;
+	}
+
+	bool lock_held = st_lock_held_by_current_thread();
+	
+	run_if_false(st_lock_acquire(), lock_held);
+	struct shared_table_entry *st = st_find_entry(spt->file, spt->offset);
+	run_if_false(st_lock_release(), lock_held);
+	
+	if (st != NULL) {
+	  install_shared_page(st, spt);
+	} else {
+	  frame = allocate_user_page(fault_addr, PAL_USER, spt->writable);
+	  if(!file_to_frame(spt, frame)) {
+	    return false;
+	  }
+	}
+	break;
+
+      default:
+	return false;
+    }
+    
+  }
+
+  lock_acquire(&spt->ft->owners_lock);
+  if(list_empty(&spt->ft->owners)) {
+    lock_release(&spt->ft->owners_lock);
+    return false;
+  }
+    
+  struct sup_table_entry *spt_entry;
+  struct list_elem *spt_elem = list_front(&spt->ft->owners);
+  while(spt_elem != list_end(&spt->ft->owners)) {
+    spt_entry = list_entry(spt_elem, struct sup_table_entry, frame_elem);
+    spt_entry->accessed = true;
+      
+    spt_elem = list_next(spt_elem);
+  }
+
+  lock_release(&spt->ft->owners_lock);
+
+  return true;
+}
+
+struct sup_table_entry *grow_stack(void *fault_addr,
+ 				   struct sup_table_entry *spt_entry) {
+  struct thread *t = thread_current();
+  struct sup_table_entry *spt = spt_entry;
+  
+  /* Check if page fault occurred because of full stack */
+  if(spt == NULL && (t->curr_esp - MAX_PUSH_SIZE) <= fault_addr) {
+    if(t->stack_page_cnt++ >= MAX_STACK_PAGES){
+      return NULL;
+    }
+    
+    create_stack_page(pg_round_down(fault_addr));
+    spt = spt_find_entry(t, fault_addr);
+  }
+
+  return spt;
 }
 
 struct sup_table_entry *grow_stack_if_needed(struct thread *t, const void *uaddr) {

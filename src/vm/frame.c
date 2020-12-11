@@ -254,7 +254,9 @@ void ft_pin(const void *uaddr, unsigned size) {
   struct sup_table_entry *spt;
   while(size > 0) {
     
-    spt = grow_stack_if_needed(t, uaddr);
+    spt = spt_find_entry(t, uaddr);
+
+    spt = grow_stack(uaddr, spt);
     
     if(spt == NULL) {
       thread_exit();

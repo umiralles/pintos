@@ -135,7 +135,6 @@ struct thread
     struct tid_elem *tid_elem;          /* Pointer to this thread's
 					   tid_elem in its parent's
 					   child_tid_list */
-    // TODO: should we have a ifdef VM? weird to have these in userprog
     void *curr_esp;                     /* Current esp of last user thread */
     struct hash sup_table;              /* Supplemental page table */
     struct hash mmap_table;             /* Memory mapped files table */

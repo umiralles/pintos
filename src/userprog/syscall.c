@@ -10,6 +10,7 @@
 #include "filesys/directory.h"
 #include "userprog/pagedir.h"
 #include "userprog/process.h"
+#include "userprog/exception.h"
 #include "userprog/syscall.h"
 #include "devices/shutdown.h"
 #include "devices/input.h"
@@ -36,10 +37,10 @@ static void syscall_mmap(struct intr_frame *f);
 static void syscall_munmap(struct intr_frame *f);
 
 /* MEMORY ACCESS FUNCTION */
-static void syscall_access_memory(const void *vaddr);
-static void syscall_access_block(const void *block, unsigned size);
-static void syscall_access_string(const char *str);
-static bool check_filename(const char *name);
+static void syscall_access_memory(void *vaddr);
+static void syscall_access_block(void *block, unsigned size);
+static void syscall_access_string(char *str);
+static bool check_filename(char *name);
 
 
 /* HELPER FUNCTIONS */
@@ -99,7 +100,7 @@ static void syscall_exit(struct intr_frame *f) {
    Takes in the name of the executable given in cmd_line;
    Returns the id of the child thread created or -1 if error */
 static void syscall_exec(struct intr_frame *f) {
-  const char *cmd_line = GET_ARGUMENT_VALUE(f, char *, 1);
+  char *cmd_line = GET_ARGUMENT_VALUE(f, char *, 1);
 
   syscall_access_string(cmd_line);
   int child_tid = process_execute(cmd_line);
@@ -127,7 +128,7 @@ static void syscall_wait(struct intr_frame *f) {
    Takes in name of the file to be created;
    Returns boolean stating whether it was successful */
 static void syscall_create(struct intr_frame *f) {
-  const char *name = GET_ARGUMENT_VALUE(f, char *, 1);
+  char *name = GET_ARGUMENT_VALUE(f, char *, 1);
   uint32_t initial_size = GET_ARGUMENT_VALUE(f, uint32_t, 2);
   bool res = false;
   
@@ -144,7 +145,7 @@ static void syscall_create(struct intr_frame *f) {
    Takes in the name of the file to be deleted;
    Returns boolean stating whether file was successfully deleted */
 static void syscall_remove(struct intr_frame *f) {
-  const char *name = GET_ARGUMENT_VALUE(f, char *, 1);
+  char *name = GET_ARGUMENT_VALUE(f, char *, 1);
   bool res = false;
   
   if(check_filename(name)) {
@@ -160,7 +161,7 @@ static void syscall_remove(struct intr_frame *f) {
    Takes in the name of the file to be opened;
    Returns the fd of the file or -1 if unsuccessful */
 static void syscall_open(struct intr_frame *f) {
-  const char *name = GET_ARGUMENT_VALUE(f, char *, 1);
+  char *name = GET_ARGUMENT_VALUE(f, char *, 1);
   int fd = ERROR_CODE;
 
   if(check_filename(name)) {
@@ -243,9 +244,11 @@ static void syscall_read(struct intr_frame *f) {
     struct file_elem *file = get_file(t, fd);
     if(file != NULL) {
       ft_pin(buffer, size);
-      lock_acquire(&filesys_lock);
-      bytes_read = (int) file_read(file->file, buffer, (off_t) size);
-      lock_release(&filesys_lock);
+      if(load_frame(buffer, f->esp, LOAD_ACCESS, USER_ACCESS, NULL)) {
+	lock_acquire(&filesys_lock);
+	bytes_read = (int) file_read(file->file, buffer, (off_t) size);
+	lock_release(&filesys_lock);
+      }
       ft_unpin(buffer, size);
     }
   }
@@ -260,7 +263,7 @@ static void syscall_read(struct intr_frame *f) {
    Can kill the thread if buffer is not in valid user memory */
 static void syscall_write(struct intr_frame *f) {
   int fd = GET_ARGUMENT_VALUE(f, int, 1);
-  const void *buffer = GET_ARGUMENT_VALUE(f, void *, 2);
+  void *buffer = GET_ARGUMENT_VALUE(f, void *, 2);
   unsigned size = GET_ARGUMENT_VALUE(f, unsigned, 3);
   int bytes_written = ERROR_CODE;
 
@@ -278,10 +281,12 @@ static void syscall_write(struct intr_frame *f) {
 
     if (file_elem != NULL) {
       ft_pin(buffer, size);
-      lock_acquire(&filesys_lock);
-      bytes_written = file_write(file_elem->file, buffer, (off_t) size);
-      lock_release(&filesys_lock);
-      ft_unpin(buffer, size);
+      if(load_frame(buffer, f->esp, LOAD_ACCESS, USER_ACCESS, NULL)) {
+	lock_acquire(&filesys_lock);
+	bytes_written = file_write(file_elem->file, buffer, (off_t) size);
+	lock_release(&filesys_lock);
+      }
+      ft_pin(buffer, size);
     }
   }
   
@@ -416,7 +421,7 @@ static void syscall_munmap(struct intr_frame *f) {
 /* MEMORY ACCESS FUNCTION */
 /* Checks validity of any user supplied pointer
    A valid pointer is one that is in user space and on an allocated page */
-static void syscall_access_memory(const void *vaddr) {
+static void syscall_access_memory(void *vaddr) {
 
   if(!(is_user_vaddr(vaddr))) {
     thread_exit();
@@ -426,8 +431,8 @@ static void syscall_access_memory(const void *vaddr) {
 /* Checks validity of a user block of data of known size
    Takes in the start of the block and its size
    Checks start and end of buffer and every PGSIZE interval inbetween */
-static void syscall_access_block(const void *block, unsigned size) {
-  const void *curr = block;
+static void syscall_access_block(void *block, unsigned size) {
+  void *curr = block;
   
   for(unsigned i = 0; i < size; i+= PGSIZE) {
     curr = block + i;
@@ -438,8 +443,8 @@ static void syscall_access_block(const void *block, unsigned size) {
 }
 
 /* Checks validity and length of a filename */
-static bool check_filename(const char *name) {
-  const char *curr = name;
+static bool check_filename(char *name) {
+  char *curr = name;
   int i = 0;
   
   do {
@@ -456,8 +461,8 @@ static bool check_filename(const char *name) {
 }
 
 /* Checks validity of all char addresses in a string */
-static void syscall_access_string(const char *str) {
-  const char *curr = str;
+static void syscall_access_string(char *str) {
+  char *curr = str;
 
   do {
     syscall_access_memory(curr);
