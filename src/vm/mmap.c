@@ -7,16 +7,22 @@
 #include "threads/vaddr.h"
 #include "filesys/off_t.h"
 #include "userprog/syscall.h"
+#include "userprog/process.h"
 #include "userprog/pagedir.h"
 #include "vm/page.h"
 
 /* Hash functions for mmap_table */
 static hash_hash_func mmap_hash_mapid;
 static hash_less_func mmap_cmp_mapid;
+static hash_action_func mmap_destroy_entry;
 
 /* Initialise sup_table */
 void mmap_init(struct hash *mmap_table) {
   hash_init(mmap_table, mmap_hash_mapid, mmap_cmp_mapid, NULL);
+}
+
+void mmap_destroy(struct hash *mmap_table) {
+  hash_destroy(mmap_table, mmap_destroy_entry);
 }
 
 /* Calculates a hash value based on mmap_entry's identifier */
@@ -42,6 +48,7 @@ mapid_t mmap_create_entry(struct file *file, void *addr) {
   if(mmap_entry == NULL) {
     return ERROR_CODE;
   }
+  create_alloc_elem(mmap_entry, MALLOC_PTR);
 
   struct thread *t = thread_current();
   
@@ -49,6 +56,7 @@ mapid_t mmap_create_entry(struct file *file, void *addr) {
   mmap_entry->file = file;
   mmap_entry->addr = addr;
   hash_insert(&t->mmap_table, &mmap_entry->elem);
+  remove_alloc_elem(mmap_entry);
 
   t->next_map_id++;	
 
@@ -117,7 +125,7 @@ void mmap_remove_entry(struct mmap_entry *mmap, bool destroy) {
   free(mmap);
 }
 
-void mmap_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
+static void mmap_destroy_entry(struct hash_elem *e, void *aux UNUSED) {
   struct mmap_entry *mmap = hash_entry(e, struct mmap_entry, elem);
   
   mmap_remove_entry(mmap, true);

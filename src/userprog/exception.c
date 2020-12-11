@@ -289,8 +289,8 @@ bool load_frame(void *fault_addr, void *esp, bool fault, bool user, bool write) 
 	swap_to_frame(spt, frame);
 	break;
 
-	/* Allocate a user accessable page which, if modified, will be put in the
-	   swap space on eviction */
+	/* Allocate a user accessable page which, if modified, will be put in
+	   the swap space on eviction */
       case MMAPPED_PAGE:
 	frame = allocate_user_page(fault_addr, PAL_USER, spt->writable);
 	if(spt->modified) {

@@ -49,12 +49,15 @@ process_execute (const char *file_name)
   fn_copy = palloc_get_page (0);
   if(fn_copy == NULL)
     return TID_ERROR;
+  create_alloc_elem(fn_copy, PALLOC_PTR);
+  
   strlcpy(fn_copy, file_name, PGSIZE);
   
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create(file_name, PRI_DEFAULT, start_process, fn_copy);
  
   if(tid == TID_ERROR) {
+    remove_alloc_elem(fn_copy);
     palloc_free_page(fn_copy);
   }
 
@@ -113,6 +116,7 @@ start_process (void *file_name_)
     sema_up(&thread_current()->tid_elem->child_semaphore);
     thread_exit();
   }
+  create_alloc_elem(arg_page, PALLOC_PTR);
 
   char *token;
   next_arg_location = arg_page;
@@ -129,9 +133,9 @@ start_process (void *file_name_)
       /* Sema up child_semaphore to let parent continue at failure */
       sema_up(&thread_current()->tid_elem->child_semaphore);
       
-      clean_arguments(&arg_list, arg_page);
       thread_exit();
     }
+    create_alloc_elem(current_arg, MALLOC_PTR);
         
     current_arg->arg = next_arg_location;    
     strlcpy(current_arg->arg, token, PGSIZE);
@@ -152,6 +156,7 @@ start_process (void *file_name_)
   success = load (arg1, &if_.eip, &if_.esp);
   
   /* If load failed, quit. */
+  remove_alloc_elem(file_name);
   palloc_free_page (file_name);
   
   if(!success) {
@@ -160,7 +165,6 @@ start_process (void *file_name_)
     /* Sema up to let parent continue at failure */
     sema_up(&thread_current()->tid_elem->child_semaphore);
     
-    clean_arguments(&arg_list, arg_page);
     thread_exit ();
   }
 
@@ -224,8 +228,11 @@ static void clean_arguments(struct list *arg_list, void *arg_page) {
   while (e != list_end(arg_list)) {
     struct argument *arg = list_entry(e, struct argument, arg_elem);
     e = list_next(e);
+    remove_alloc_elem(arg);
     free(arg);
   }
+
+  remove_alloc_elem(arg_page);
   palloc_free_page(arg_page);
 }
 
@@ -296,7 +303,25 @@ process_exit (void)
   struct thread *t = thread_current ();
   uint32_t *pd;
 
-  hash_destroy(&t->mmap_table, mmap_destroy_entry);   
+  /* Free all pointers still allocated */
+  if(!list_empty(&t->allocated_pointers)) {
+    struct list_elem *ptr_elem = list_front(&t->allocated_pointers);
+    while(ptr_elem != list_end(&t->allocated_pointers)) {
+      struct pointer_elem *ptr = list_entry(ptr_elem, struct pointer_elem, elem);
+
+      ptr_elem = list_next(ptr_elem);
+
+      if(ptr->palloc == PALLOC_PTR) {
+	palloc_free_page(ptr->pointer);
+      } else {
+	free(ptr->pointer);
+      }
+      free(ptr);
+    }
+  }
+  
+  /* Destroy mmap table */
+  mmap_destroy(&t->mmap_table);
 
   /* Frees all memory associated with open files */
   struct list_elem *current;
@@ -555,7 +580,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
                   read_bytes = 0;
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
-              if (!load_segment (file, file_page, (void *) mem_page,
+              if (!load_segment (file, file_page, (void *)  mem_page,
                                  read_bytes, zero_bytes, writable))
                 goto done;
             }
@@ -744,18 +769,21 @@ void install_shared_page(struct shared_table_entry *st,
    the file is writable or not 
    Returns the address of the frame allocated or null if out of pages */
 void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
-  void *kpage = palloc_get_page(PAL_USER | flags);
   struct thread *t = thread_current();
   uaddr = pg_round_down(uaddr);
  
   struct sup_table_entry *spt;
   struct frame_table_entry *ft;
+  
+  void *kpage = palloc_get_page(PAL_USER | flags);
 
   if(kpage != NULL) {
     /* Allocation successful, adds frame to table */
+    create_alloc_elem(kpage, PALLOC_PTR);
     bool success = install_page(uaddr, kpage, writable);
     
     if(!success) {
+      remove_alloc_elem(kpage);
       palloc_free_page(kpage);
       thread_exit();
     }
@@ -763,9 +791,11 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     /* Create and initialise new frame table entry */
     ft = malloc(sizeof(struct frame_table_entry));
     if(ft == NULL) {
+      remove_alloc_elem(kpage);
       palloc_free_page(kpage);
       thread_exit(); 
     }
+    create_alloc_elem(ft, MALLOC_PTR);
        
     ft->frame = kpage;
     ft->timestamp = timer_ticks();
@@ -793,6 +823,9 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     ft_lock_acquire();
     ft_insert_entry(&ft->elem);
     ft_lock_release();
+    
+    remove_alloc_elem(ft);
+    remove_alloc_elem(kpage);
   } else {
     /* Allocation fails, frame is evicted and has its metadata replaced */
 
@@ -884,6 +917,8 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     if (st == NULL) {
       thread_exit();
     }
+    create_alloc_elem(st, MALLOC_PTR);
+    
     st->ft = ft;
     st->file = spt->file;
     st->offset = spt->offset;
@@ -891,8 +926,48 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     st_lock_acquire();
     st_insert_entry(&st->elem);
     st_lock_release();
+    remove_alloc_elem(st);
+
   }
     
 
   return kpage;
+}
+
+/* Creates a pointer_elem and adds it to the thread's allocated_pointers list */
+void create_alloc_elem(void *pointer, bool palloc) {
+  struct thread *t = thread_current();
+  struct pointer_elem *ptr = malloc(sizeof(struct pointer_elem));
+
+  if(ptr == NULL) {
+    thread_exit();
+  }
+
+  ptr->pointer = pointer;
+  ptr->palloc = palloc;
+
+  list_push_front(&t->allocated_pointers, &ptr->elem);
+}
+
+/* Removes a pointer_elem with a certain pointer from the thread's
+   allocated_pointers list */
+void remove_alloc_elem(void *pointer) {
+  struct thread *t = thread_current();
+  
+  if(pointer != NULL && !list_empty(&t->allocated_pointers)) {
+
+    struct pointer_elem *ptr;
+    struct list_elem *ptr_elem = list_front(&t->allocated_pointers);
+    while(ptr_elem != list_end(&t->allocated_pointers)) {
+      ptr = list_entry(ptr_elem, struct pointer_elem, elem);
+	
+      if(ptr->pointer == pointer) {
+	list_remove(ptr_elem);
+	free(ptr);
+	break;
+      }
+
+      ptr_elem = list_next(ptr_elem);
+    }
+  }
 }

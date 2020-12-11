@@ -27,6 +27,7 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+#ifdef USERPROG
 /* Element for use in a list of child processes of a parent thread.
    Used in the thread struct and userprog/process.c */
 struct tid_elem {
@@ -43,6 +44,7 @@ struct tid_elem {
   bool has_faulted;		      /* True when process exits erroneously
 					 duing startup */
 };
+#endif
 
 /* A kernel thread or user process.
 
@@ -135,13 +137,14 @@ struct thread
     struct tid_elem *tid_elem;          /* Pointer to this thread's
 					   tid_elem in its parent's
 					   child_tid_list */
+    struct list allocated_pointers;     /* List of pointers to be freed on
+					   exit */
     void *curr_esp;                     /* Current esp of last user thread */
     struct hash sup_table;              /* Supplemental page table */
     struct hash mmap_table;             /* Memory mapped files table */
     int next_map_id;                    /* Next available memory map id */
     int stack_page_cnt;                 /* Number of stack pages added. */
 #endif
-
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -188,4 +191,5 @@ list_less_func cmp_priority;
 /* Donations function. */
 void donation_grant(struct lock *lock, int priority);
 void donation_revoke(struct lock *lock);
+
 #endif /* threads/thread.h */

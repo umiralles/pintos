@@ -245,7 +245,8 @@ thread_create (const char *name, int priority,
   t = palloc_get_page (PAL_ZERO);
   if (t == NULL)
     return TID_ERROR;
-
+  create_alloc_elem(t, PALLOC_PTR);
+  
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
@@ -257,9 +258,11 @@ thread_create (const char *name, int priority,
   t->tid_elem = malloc(sizeof(struct tid_elem));
 
   if(t->tid_elem == NULL) {
+    remove_alloc_elem(t);
     free(t);
     return TID_ERROR;
   }
+  create_alloc_elem(t->tid_elem, MALLOC_PTR);
   
   t->tid_elem->tid = tid;
   t->tid_elem->exit_status = -1;
@@ -268,11 +271,10 @@ thread_create (const char *name, int priority,
   sema_init(&t->tid_elem->child_semaphore, 0);
   lock_init(&t->tid_elem->tid_elem_lock);
   list_push_back(&thread_current()->child_tid_list, &t->tid_elem->elem);
+  remove_alloc_elem(t->tid_elem);
 
-  /* Initialise suplemental page table */
+  /* Initialise hash tables for the thread struct */
   spt_init(&t->sup_table);
-
-  /* Initialise memory mapped files table */
   mmap_init(&t->mmap_table);
 
 #endif
@@ -306,8 +308,10 @@ thread_create (const char *name, int priority,
   sf->ebp = 0;
 
   intr_set_level (old_level);
-
+  
   /* Add to run queue. */
+  remove_alloc_elem(aux);
+  remove_alloc_elem(t);
   thread_unblock (t);
 
   if (t->priority > thread_get_priority()){ 
@@ -656,9 +660,9 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&t->files);
   t->next_available_fd = STDOUT_FILENO + 1;
   list_init(&t->child_tid_list);
+  list_init(&t->allocated_pointers);
   t->stack_page_cnt = 0;
   t->next_map_id = 0;
-  
 #endif
 
   t->magic = THREAD_MAGIC;
