@@ -246,12 +246,16 @@ bool st_lock_held_by_current_thread(void) {
 /* Pins a buffer at uaddr of size size so its frames cannot be evicted 
    Takes the start address of the buffer and its size */
 void ft_pin(const void *uaddr, unsigned size) {
+  ASSERT (is_user_vaddr(uaddr));
+    
+  struct thread *t = thread_current();
   struct sup_table_entry *spt;
-  while(size > PGSIZE) {
-    spt = spt_find_entry(thread_current(), uaddr);
+  while(size > 0) {
+    spt = spt_find_entry(t, uaddr);
     if(spt == NULL) {
       thread_exit();
     }
+    
     spt->ft->pinned = true;
     uaddr += PGSIZE;
     size -= PGSIZE;
@@ -261,8 +265,10 @@ void ft_pin(const void *uaddr, unsigned size) {
 /* Unpins a buffer at uaddr of size size so its frames can be evicted 
    Takes the start address of the buffer and its size */
 void ft_unpin(const void *uaddr, unsigned size) {
+  ASSERT (is_user_vaddr(uaddr));
+  
   struct sup_table_entry *spt;
-  while(size > PGSIZE) {
+  while(size > 0) {
     spt = spt_find_entry(thread_current(), uaddr);
     if(spt == NULL) {
       thread_exit();

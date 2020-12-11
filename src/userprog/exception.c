@@ -213,15 +213,20 @@ page_fault (struct intr_frame *f)
 
     /* Allocate physical memory to map to the fault_addr */
     switch(spt->type) {
+      /* Allocate a zero page */
       case NEW_STACK_PAGE:
 	frame = allocate_user_page(fault_addr, PAL_ZERO, spt->writable);
 	break;
+
+      /* Allocate a zero page to be put the swap space on eviction */
       case IN_SWAP_FILE:	
       case STACK_PAGE:
 	frame = allocate_user_page(fault_addr, PAL_ZERO, spt->writable);
 	swap_to_frame(spt, frame);
 	break;
 
+      /* Allocate a user accessable page which, if modified, will be put in the
+	 swap space on eviction */
       case MMAPPED_PAGE:
 	frame = allocate_user_page(fault_addr, PAL_USER, spt->writable);
 	if(spt->modified) {
@@ -232,7 +237,9 @@ page_fault (struct intr_frame *f)
 	  }
 	}
 	break;
-	
+
+	// TODO: needs comment
+      /* */
       case ZERO_PAGE:
       case FILE_PAGE:
 	if(spt->writable) {

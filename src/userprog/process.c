@@ -820,7 +820,10 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
           swap_lock_release();
           thread_exit();
         }
+	
+	ft_pin(uaddr, PGSIZE);
         swap_write_frame(ft->frame, start);
+	ft_unpin(uaddr, PGSIZE);
         swap_lock_release();
         spt->block_number = start;
 
