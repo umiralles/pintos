@@ -255,7 +255,6 @@ void ft_pin(const void *uaddr, unsigned size) {
   while(size > 0) {
     
     spt = spt_find_entry(t, uaddr);
-
     spt = grow_stack(uaddr, spt);
     
     if(spt == NULL) {
@@ -280,11 +279,13 @@ void ft_pin(const void *uaddr, unsigned size) {
    Takes the start address of the buffer and its size */
 void ft_unpin(const void *uaddr, unsigned size) {
   ASSERT (is_user_vaddr(uaddr));
-  
+
+  struct thread *t = thread_current();
   struct sup_table_entry *spt;
   while(size > 0) {
     
-    spt = grow_stack_if_needed(thread_current(), uaddr);
+    spt = spt_find_entry(t, uaddr);
+    spt = grow_stack(uaddr, spt);
 
     if(spt == NULL) {
       thread_exit();

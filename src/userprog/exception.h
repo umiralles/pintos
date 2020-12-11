@@ -23,7 +23,6 @@
 
 void exception_init (void);
 void exception_print_stats (void);
-struct sup_table_entry *grow_stack_if_needed(struct thread *,const void *);
 
 bool load_frame(void *, void *, bool, bool, bool);
 struct sup_table_entry *grow_stack(void *, struct sup_table_entry *);

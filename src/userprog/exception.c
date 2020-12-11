@@ -166,13 +166,14 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
   
-   //printf("page_fault: %p, %lld \n", fault_addr, page_fault_cnt);		      
+  printf("page_fault: %lld, %s, %p\n", page_fault_cnt, t->name, fault_addr);		      
   /* Checks for if the page fault happened in a valid case */
   if(!not_present || !fault_addr
      || pagedir_get_page(t->pagedir, pg_round_down(fault_addr))) {
     exception_exit(f);
   }
 
+  /* Load a frame for the virtual address */
   if(!load_frame(fault_addr, f->esp, FAULT_ACCESS, user, write)) {
     exception_exit(f);
   }
@@ -378,26 +379,6 @@ struct sup_table_entry *grow_stack(void *fault_addr,
     
     create_stack_page(pg_round_down(fault_addr));
     spt = spt_find_entry(t, fault_addr);
-  }
-
-  return spt;
-}
-
-struct sup_table_entry *grow_stack_if_needed(struct thread *t, const void *uaddr) {
-  struct sup_table_entry *spt;
-  
-  /* See if the access is supposed to exist in virtual memory */
-  spt = spt_find_entry(t, uaddr);
-  
-  /* Check if page fault occurred because of full stack*/
-  if(spt == NULL && (t->curr_esp - MAX_PUSH_SIZE) <= uaddr) {
-    //printf("%d\n", page_fault_cnt);
-    if(t->stack_page_cnt++ >= MAX_STACK_PAGES){
-      return NULL;
-    }
-    
-    create_stack_page(pg_round_down(uaddr));
-    spt = spt_find_entry(t, uaddr);
   }
 
   return spt;
