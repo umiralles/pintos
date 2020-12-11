@@ -172,6 +172,8 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
   
+   //printf("page_fault: %p, %lld \n", fault_addr, page_fault_cnt);		      
+  
   /* Checks for if the page fault happened in a valid case */
   if(!not_present || !fault_addr || (user && !is_user_vaddr(fault_addr))
      || pagedir_get_page(t->pagedir, pg_round_down(fault_addr))) {
@@ -308,10 +310,6 @@ static void exception_exit(struct intr_frame *f) {
    Returns false if more data is found than expected */
 static bool file_to_frame(struct sup_table_entry *spt, void *frame) {
   
-  //check if file is null/ mapid is -1
-  //if both true - return false
-  //if mapid - not -1 - call helper func
-
   bool lock_held = filesys_lock_held_by_current_thread();
   
   run_if_false(filesys_lock_acquire(), lock_held);

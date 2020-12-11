@@ -1,6 +1,6 @@
 #include "vm/page.h"
 #include <debug.h>
-
+#include <stdio.h>
 #include "threads/vaddr.h"
 #include "threads/thread.h"
 #include "threads/malloc.h"
@@ -30,6 +30,8 @@ void spt_destroy(struct hash *sup_table) {
 bool create_file_page(void *upage, struct file *file, off_t offset,
 		      bool writable, size_t read_bytes,
 		      enum sup_entry_type type) {
+		      
+  //printf("create_file_page: %p, %p \n", upage, pg_round_down(upage));		      
   struct thread *t = thread_current ();
 
   /* Check if virtual page already allocated */
@@ -88,6 +90,7 @@ bool create_file_page(void *upage, struct file *file, off_t offset,
 /* Creates a supplemental page table for a stack page
    Takes the user virtual address of the stack page */
 void create_stack_page(void *upage) {
+  //printf("create_stack_page: %p, %p \n", upage, pg_round_down(upage));		      
   struct sup_table_entry *spt = malloc(sizeof(struct sup_table_entry));  
   if(spt == NULL) {
     thread_exit();

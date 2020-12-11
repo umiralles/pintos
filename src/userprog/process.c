@@ -813,10 +813,11 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
       /* Get the frame's owner (only has one owner as writable) */
       e = list_pop_front(&ft->owners);
       spt = list_entry(e, struct sup_table_entry, frame_elem);
-      if(pagedir_is_dirty(spt->owner->pagedir, spt->upage)) {
+      if((pagedir_is_dirty(spt->owner->pagedir, spt->upage)) || spt->modified) {
         /* Put frame data in swap system */
         swap_lock_acquire();
         size_t start = find_swap_space(1);
+
         if (start == BITMAP_ERROR) {
           lock_release(&ft->owners_lock);
           swap_lock_release();
@@ -857,6 +858,7 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     ft->reference_bit = 1;
     ft->writable = spt->writable;
     ft->modified = spt->modified;
+
     memset(ft->frame, 0, PGSIZE);
 
     kpage = ft->frame;
@@ -865,11 +867,14 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
       palloc_free_page(kpage);
       PANIC("Evicted installaton fails");
     }
+    
+    pagedir_set_dirty(spt->owner->pagedir, spt->upage, spt->modified);
   }
+  
 
   /* Sets loaded page's frame table to the found frame table */
   spt->ft = ft;
-  ft->pinned = false;
+  ft->pinned = spt->pinned;
 
   /* Updates type if new stack page loaded, 
      adds shared table entry for read only files */
