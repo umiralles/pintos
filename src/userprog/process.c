@@ -475,9 +475,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
   
   process_activate ();
-
-  // when runny multi-oom the filesys_lock below is already acquired by the
-  // current thread
   
   /* Open executable file. */
   filesys_lock_acquire();

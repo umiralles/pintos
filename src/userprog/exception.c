@@ -17,7 +17,7 @@
 #include "vm/swap.h"
 
 #define MAX_PUSH_SIZE (32)
-#define MAX_STACK_PAGES (2048)
+#define MAX_STACK_PAGES (1024)
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -165,8 +165,7 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
-  
-  printf("page_fault: %lld, %s, %p\n", page_fault_cnt, t->name, fault_addr);		      
+  	      
   /* Checks for if the page fault happened in a valid case */
   if(!not_present || !fault_addr
      || pagedir_get_page(t->pagedir, pg_round_down(fault_addr))) {
@@ -177,18 +176,6 @@ page_fault (struct intr_frame *f)
   if(!load_frame(fault_addr, f->esp, FAULT_ACCESS, user, write)) {
     exception_exit(f);
   }
-  
-  /* To implement virtual memory, delete the rest of the function
-     body, and replace it with code that brings in the page to
-     which fault_addr refers. */
-  /*
-    printf ("Page fault at %p: %s error %s page in %s context.\n",
-          fault_addr,
-          not_present ? "not present" : "rights violation",
-          write ? "writing" : "reading",
-          user ? "user" : "kernel");
-    kill (f);
-  */
 }
 
 /* HELPER FUNCTIONS */
@@ -196,10 +183,13 @@ page_fault (struct intr_frame *f)
 /* Exits the thread after preserving the current result
    and returning an error code of -1 */
 static void exception_exit(struct intr_frame *f) {
-  if(filesys_lock_held_by_current_thread()) {
-    filesys_lock_release();
-  }
-  
+  /* Release locks that may be held */
+  run_if_false(filesys_lock_release(), !filesys_lock_held_by_current_thread());
+  run_if_false(ft_lock_release(), !ft_lock_held_by_current_thread());
+  run_if_false(st_lock_release(), !st_lock_held_by_current_thread());
+  run_if_false(swap_lock_release(), !swap_lock_held_by_current_thread());
+
+  /* Set result to -1 */
   f->eip = (void *) f->eax;
   f->eax = 0xffffffff;
   thread_exit();
