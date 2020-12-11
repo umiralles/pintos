@@ -10,6 +10,7 @@
 #include "filesys/directory.h"
 #include "userprog/pagedir.h"
 #include "userprog/process.h"
+#include "userprog/exception.h"
 #include "userprog/syscall.h"
 #include "devices/shutdown.h"
 #include "devices/input.h"
@@ -243,9 +244,11 @@ static void syscall_read(struct intr_frame *f) {
     struct file_elem *file = get_file(t, fd);
     if(file != NULL) {
       ft_pin(buffer, size);
-      lock_acquire(&filesys_lock);
-      bytes_read = (int) file_read(file->file, buffer, (off_t) size);
-      lock_release(&filesys_lock);
+      if(load_frame(buffer, f->esp, LOAD_ACCESS, USER_ACCESS, NULL)) {
+	lock_acquire(&filesys_lock);
+	bytes_read = (int) file_read(file->file, buffer, (off_t) size);
+	lock_release(&filesys_lock);
+      }
       ft_unpin(buffer, size);
     }
   }
@@ -278,10 +281,12 @@ static void syscall_write(struct intr_frame *f) {
 
     if (file_elem != NULL) {
       ft_pin(buffer, size);
-      lock_acquire(&filesys_lock);
-      bytes_written = file_write(file_elem->file, buffer, (off_t) size);
-      lock_release(&filesys_lock);
-      ft_unpin(buffer, size);
+      if(load_frame(buffer, f->esp, LOAD_ACCESS, USER_ACCESS, NULL)) {
+	lock_acquire(&filesys_lock);
+	bytes_written = file_write(file_elem->file, buffer, (off_t) size);
+	lock_release(&filesys_lock);
+      }
+      ft_pin(buffer, size);
     }
   }
   

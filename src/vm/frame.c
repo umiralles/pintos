@@ -3,7 +3,7 @@
 
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
-#include "threads/palloc.h"
+#include "userprog/exception.h"
 
 /* Frame table */
 static struct hash frame_table;
@@ -253,6 +253,9 @@ void ft_pin(const void *uaddr, unsigned size) {
   while(size > 0) {
     
     spt = spt_find_entry(t, uaddr);
+
+    spt = grow_stack(uaddr, spt);
+    
     if(spt == NULL) {
       thread_exit();
     }
