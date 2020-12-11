@@ -281,7 +281,7 @@ static void syscall_write(struct intr_frame *f) {
       lock_acquire(&filesys_lock);
       bytes_written = file_write(file_elem->file, buffer, (off_t) size);
       lock_release(&filesys_lock);
-      ft_pin(buffer, size);
+      ft_unpin(buffer, size);
     }
   }
   

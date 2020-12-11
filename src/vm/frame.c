@@ -263,7 +263,11 @@ void ft_pin(const void *uaddr, unsigned size) {
 
     spt->pinned = true;
     uaddr += PGSIZE;
-    size -= PGSIZE;
+    if(size < PGSIZE){
+      size = 0;
+    } else {
+      size -= PGSIZE;
+    }
   }
 }
 
@@ -285,6 +289,10 @@ void ft_unpin(const void *uaddr, unsigned size) {
     
     spt->pinned = false;
     uaddr += PGSIZE;
-    size -= PGSIZE;
+    if(size < PGSIZE){
+      size = 0;
+    } else {
+      size -= PGSIZE;
+    }
   }
 }
