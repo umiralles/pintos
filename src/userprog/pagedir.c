@@ -216,6 +216,10 @@ pagedir_set_accessed (uint32_t *pd, const void *vpage, bool accessed)
   uint32_t *pte = lookup_page (pd, vpage, false);
   if (pte != NULL) 
     {
+      struct frame_table_entry *ft = ft_find_entry(vpage);
+      if (ft != NULL) {
+        ft->reference_bit = true;
+      }
       if (accessed)
         *pte |= PTE_A;
       else 

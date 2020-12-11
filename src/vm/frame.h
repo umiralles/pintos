@@ -16,15 +16,20 @@ struct shared_table_entry {
 
 /* Single row of the frame table */
 struct frame_table_entry {
-  void *frame;             /* Frame of memory that the data corresponds to */
-  struct list owners;      /* The sup table entries that the page belongs to */
-  struct lock owners_lock; /* Restricts access to owners list */
-  int64_t timestamp;       /* Time the frame was allocated in ticks */
-  struct hash_elem elem;   /* Used to insert into the table */
-  bool reference_bit;      /* Used for second chance algorithm calculations */
-  bool modified;           /* States whether the frame has been modified */
-  bool writable;           /* Whether the thread can be written to or not */
-  bool pinned;		   /* True if frame is not able to be evicted */
+  void *frame;                    /* Frame of memory that the data 
+				     corresponds to */
+  struct list owners;             /* The sup table entries that the 
+				     page belongs to */
+  struct lock owners_lock;        /* Restricts access to owners list */
+  int64_t timestamp;              /* Time the frame was allocated in ticks */
+  struct hash_elem elem;          /* Used to insert into the table */
+  struct frame_table_entry *next; /* Points to next frame in clock order */
+  struct frame_table_entry *prev; /* Points to previous frame in clock order */
+  bool reference_bit;             /* Used for second chance algorithm 
+				     calculations */
+  bool modified;                  /* Whether the frame has been modified */
+  bool writable;                  /* Whether the thread can be written to */
+  bool pinned;		          /* Whether frame is not able to be evicted */
 };
 
 /* Initialise frame_table */
@@ -40,6 +45,8 @@ void ft_reset_reference_bits(void);
 
 /* Page replacement algorithm */
 struct frame_table_entry *ft_get_victim(void);
+void ft_clock_insert(struct frame_table_entry *);
+void ft_clock_remove(struct frame_table_entry *);
 
 /* Initialise shared_table */
 void st_init(void);

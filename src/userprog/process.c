@@ -775,6 +775,8 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     ft->reference_bit = 0;
     ft->modified = 0;
     ft->writable = writable;
+    ft->prev = NULL;
+    ft->next = NULL;
    
     spt = spt_find_entry(t, uaddr);
 
@@ -860,6 +862,11 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     memset(ft->frame, 0, PGSIZE);
 
     kpage = ft->frame;
+    
+    ft_lock_acquire();
+    ft_clock_insert(ft);
+    ft_lock_release();
+    
     bool success = install_page(spt->upage, kpage, spt->writable);
     if (!success) {
       palloc_free_page(kpage);

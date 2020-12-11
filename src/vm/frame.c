@@ -22,10 +22,16 @@ static hash_action_func reset_reference_bit;
 static hash_hash_func hash_file;
 static hash_less_func cmp_file;
 
-/* Initialise frame_table and frame_table_lock */
+/* First and last elements of frame table in clock order for traversal */
+static struct frame_table_entry *oldest;
+static struct frame_table_entry *newest;
+
+/* Initialise frame_table, frame_table_lock and clock order globals */
 void ft_init(void) {
   hash_init(&frame_table, hash_frame_address, cmp_frame_address, NULL);
   lock_init(&frame_table_lock);
+  oldest = NULL;
+  newest = NULL;
 }
 
 /* Initialise shared table */
@@ -73,8 +79,47 @@ static bool cmp_file(const struct hash_elem *a,
 
 /* Inserts hash_elem elem into the frame_table 
    SHOULD BE CALLED WITH THE FRAME TABLE LOCK ACQUIRED */
-void ft_insert_entry(struct hash_elem *elem) {
-  hash_insert(&frame_table, elem);
+void ft_insert_entry(struct hash_elem *e) {
+  struct frame_table_entry *ft = hash_entry(e,
+					    struct frame_table_entry, elem);
+  ft_clock_insert(ft);
+
+  /* Inserts ft into frame table */
+  hash_insert(&frame_table, e);
+}
+
+/* Inserts ft into clock ordering as the newest frame
+   SHOULD BE CALLED WITH THE FRAME TABLE LOCK ACQUIRED */
+void ft_clock_insert(struct frame_table_entry *ft) {
+  ft_clock_remove(ft);
+  
+  /* Adds ft back to list at the end */
+  if (newest == NULL) {
+    oldest = ft;
+  } else {
+    newest->next = ft;
+  }
+
+  /* Updates end of list */
+  ft->next = NULL;
+  ft->prev = newest;
+  newest = ft;
+}
+
+/* Removes ft from clock ordering
+   SHOULD BE CALLED WITH THE FRAME TABLE LOCK ACQUIRED */
+void ft_clock_remove(struct frame_table_entry *ft) {
+  if (ft != NULL && oldest == ft) {
+    oldest = ft->next;
+  }
+  
+  if (ft->prev != NULL) {
+    ft->prev->next = ft->next;
+  }
+
+  if (ft->next != NULL) {
+    ft->next->prev = ft->prev;
+  }
 }
 
 /* Inserts hash_elem elem into the shared_table 
@@ -124,39 +169,38 @@ struct shared_table_entry *st_find_entry(const struct file *file,
 /* Finds a frame to evict and returns it 
    MUST BE CALLED WITH THE FRAME TABLE LOCK */
 struct frame_table_entry *ft_get_victim(void) {
-  struct hash_iterator iterator;
-  struct hash_elem *cur;
-  struct frame_table_entry *ft;
-  
-  hash_first(&iterator, &frame_table);
+  struct frame_table_entry *ft = oldest;
+  struct frame_table_entry *victim = NULL;
 
-  bool victim_found = false;
-  
-  while (!victim_found && hash_next(&iterator)) {
-    cur = hash_cur(&iterator);
-    ft = hash_entry(cur, struct frame_table_entry, elem);
-    victim_found = !ft->reference_bit && !ft->pinned;
+  /* Check all frames using clock ordering 
+     Victim is first unpinned frame without a set reference bit */
+  while (victim == NULL && ft != NULL) {
+    victim = ft;
+    if (ft->reference_bit || ft->pinned) {
+      victim = NULL;
+      ft = ft->next;
+    }
   }
 
   /* Now check again for any unpinned page */
-  if (!victim_found) {
-    hash_first(&iterator, &frame_table);
-
-    while (!victim_found && hash_next(&iterator)) {
-      cur = hash_cur(&iterator);
-      ft = hash_entry(cur, struct frame_table_entry, elem);
-      victim_found = !ft->pinned;
+  if (victim == NULL) {
+    ft = oldest;
+    while (victim == NULL && ft != NULL) {
+      victim = ft;
+      if (ft->pinned) {
+	victim = NULL;
+	ft = ft->next;
+      }
     }
 
     /* All frames are pinned, swap cannot happen */
-    if (!victim_found) {
+    if (victim == NULL) {
       ft_lock_release();
       thread_exit();
     }
-    return hash_entry(cur, struct frame_table_entry, elem);
-  } else {
-    return ft;
   }
+  ft_clock_remove(victim);
+  return victim;
 }
 
 /* Hash action func that resets a reference bit to 0 */
@@ -184,6 +228,8 @@ void ft_remove_entry(void *frame) {
   if(ft != NULL) {
     struct hash_iterator iterator;
     struct shared_table_entry *st;
+
+    ft_clock_remove(ft);
     
     hash_first(&iterator, &shared_table);
     bool found = false;
