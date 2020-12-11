@@ -6,6 +6,8 @@
 #include "filesys/file.h"
 #include "vm/page.h"
 
+struct lock allocation_lock;
+
 /* Single row of the shared table */
 struct shared_table_entry {
   struct frame_table_entry *ft; /* Frame which the file is mapped to */

@@ -168,6 +168,7 @@ paging_init (void)
 
   ft_init();
   st_init();
+  lock_init(&allocation_lock);
   
   pd = init_page_dir = palloc_get_page (PAL_ASSERT | PAL_ZERO);
   pt = NULL;

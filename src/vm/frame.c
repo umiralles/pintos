@@ -9,6 +9,8 @@
 static struct hash frame_table;
 static struct lock frame_table_lock;
 
+extern struct lock allocation_lock;
+
 /* Shared table */
 static struct hash shared_table;
 static struct lock shared_table_lock;

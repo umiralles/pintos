@@ -799,6 +799,8 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
   } else {
     /* Allocation fails, frame is evicted and has its metadata replaced */
 
+    lock_acquire(&allocation_lock);
+
     ft_lock_acquire();
     ft = ft_get_victim();
     ft_lock_release();
@@ -814,7 +816,9 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
       e = list_pop_front(&ft->owners);
       spt = list_entry(e, struct sup_table_entry, frame_elem);
       if(pagedir_is_dirty(spt->owner->pagedir, spt->upage)) {
-        /* Put frame data in swap system */
+        pagedir_clear_page(spt->owner->pagedir, spt->upage);
+      	      
+	/* Put frame data in swap system */
         swap_lock_acquire();
         size_t start = find_swap_space(1);
         if (start == BITMAP_ERROR) {
@@ -835,7 +839,6 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
         }
         spt->modified = true;
 	spt->ft = NULL;
-	pagedir_clear_page(spt->owner->pagedir, spt->upage);
       }
     } else {
       /* Remove each owner of the frame and remove the shared table entry */
@@ -843,8 +846,8 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
       spt = list_entry(e, struct sup_table_entry, frame_elem);
       st_remove_entry(spt->file, spt->offset);
       while(!list_empty(&ft->owners)) {
-        spt->ft = NULL;
 	pagedir_clear_page(spt->owner->pagedir, spt->upage);
+	spt->ft = NULL;
         e = list_pop_front(&ft->owners);
         spt = list_entry(e, struct sup_table_entry, frame_elem);
       }
@@ -865,6 +868,7 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
       palloc_free_page(kpage);
       PANIC("Evicted installaton fails");
     }
+    lock_release(&allocation_lock);
   }
 
   /* Sets loaded page's frame table to the found frame table */
