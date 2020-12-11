@@ -79,6 +79,7 @@ bool create_file_page(void *upage, struct file *file, off_t offset,
   spt->owner = thread_current();
   spt->writable = writable;
   spt->modified = false;
+  spt->accessed = false;
   spt->pinned = false;
   spt->type = type;
 	

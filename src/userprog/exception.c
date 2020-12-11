@@ -208,6 +208,8 @@ page_fault (struct intr_frame *f)
     exception_exit(f);
   }
 
+  pagedir_set_accessed(spt->owner->pagedir, fault_addr, spt->accessed);
+  pagedir_set_dirty(spt->owner->pagedir, fault_addr, spt->modified);
   ft = spt->ft;
   
   /* Check whether a frame_entry has already been allocated */
@@ -277,6 +279,23 @@ page_fault (struct intr_frame *f)
     exception_exit(f);
   }
 
+  lock_acquire(&spt->ft->owners_lock);
+  if(list_empty(&spt->ft->owners)) {
+    lock_release(&spt->ft->owners_lock);
+    exception_exit(f);
+  }
+    
+  struct sup_table_entry *spt_entry;
+  struct list_elem *spt_elem = list_front(&spt->ft->owners);
+  while(spt_elem != list_end(&spt->ft->owners)) {
+    spt_entry = list_entry(spt_elem, struct sup_table_entry, frame_elem);
+    spt_entry->accessed = true;
+      
+    spt_elem = list_next(spt_elem);
+  }
+
+  lock_release(&spt->ft->owners_lock);
+  
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */

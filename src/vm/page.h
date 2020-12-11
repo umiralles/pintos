@@ -28,6 +28,7 @@ struct sup_table_entry {
   struct thread *owner;		/* Pointer to thread which owns this sup table */
   bool writable;                /* Whether data is writable */
   bool modified;		/* Whether data was modified */
+  bool accessed;                /* Whether data was accessed */
   bool pinned;                  /* Whether the frame must be pinned on allocation */
   struct hash_elem elem;        /* Used to store in supplemental page table */
   enum sup_entry_type type;     /* Type of entry (see enum above) */
