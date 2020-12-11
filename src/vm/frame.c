@@ -251,12 +251,17 @@ void ft_pin(const void *uaddr, unsigned size) {
   struct thread *t = thread_current();
   struct sup_table_entry *spt;
   while(size > 0) {
+    
     spt = spt_find_entry(t, uaddr);
     if(spt == NULL) {
       thread_exit();
     }
-    
-    spt->ft->pinned = true;
+
+    if(spt->ft) {
+      spt->ft->pinned = true;
+    }
+
+    spt->pinned = true;
     uaddr += PGSIZE;
     size -= PGSIZE;
   }
@@ -273,7 +278,12 @@ void ft_unpin(const void *uaddr, unsigned size) {
     if(spt == NULL) {
       thread_exit();
     }
-    spt->ft->pinned = false;
+
+    if(spt->ft) {
+      spt->ft->pinned = false;
+    }
+    
+    spt->pinned = false;
     uaddr += PGSIZE;
     size -= PGSIZE;
   }

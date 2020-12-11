@@ -47,14 +47,13 @@ void swap_write_frame(void *frame, size_t start) {
 
 /* Reads a page of data into a frame from the swap space 
    Takes the frame to write to and the start sector to read from
-   MUST ACQUIRE THE SWAP TABLE LOCK BEFORE CALLING */
+   MUST ACQUIRE THE SWAP TABLE LOCK AND PIN BEFORE CALLING */
 void swap_read_frame(void *frame, size_t start) {
   struct block *b = block_get_role(BLOCK_SWAP);
-  ft_pin(frame, PGSIZE);
+  
   for (block_sector_t i = start; i < start + PGSIZE / BLOCK_SECTOR_SIZE; i++) {
     block_read(b, i, (frame + (i - start) * BLOCK_SECTOR_SIZE));
   }
-  ft_unpin(frame, PGSIZE);
 }
 
 /* Reads a page of data from swap space into a given file 

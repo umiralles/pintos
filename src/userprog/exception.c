@@ -210,7 +210,6 @@ page_fault (struct intr_frame *f)
   
   /* Check whether a frame_entry has already been allocated */
   if(ft == NULL) {
-
     /* Allocate physical memory to map to the fault_addr */
     switch(spt->type) {
       /* Allocate a zero page */
@@ -225,8 +224,8 @@ page_fault (struct intr_frame *f)
 	swap_to_frame(spt, frame);
 	break;
 
-      /* Allocate a user accessable page which, if modified, will be put in the
-	 swap space on eviction */
+	/* Allocate a user accessable page which, if modified, will be put in the
+	   swap space on eviction */
       case MMAPPED_PAGE:
 	frame = allocate_user_page(fault_addr, PAL_USER, spt->writable);
 	if(spt->modified) {
@@ -238,7 +237,7 @@ page_fault (struct intr_frame *f)
 	}
 	break;
 
-	// TODO: needs comment
+      // TODO: needs comment
       /* */
       case ZERO_PAGE:
       case FILE_PAGE:
@@ -263,13 +262,14 @@ page_fault (struct intr_frame *f)
 	  if(!file_to_frame(spt, frame)) {
 	    exception_exit(f);
 	  }
-      	}
+	}
 	break;
 
       default:
 	//swap to file
 	exception_exit(f);
     }
+    
   } else {
     // only happens in swap
     exception_exit(f);
@@ -338,7 +338,10 @@ static void swap_to_frame(struct sup_table_entry *spt, void *frame) {
   }
 
   run_if_false(swap_lock_acquire(), lock_held);
+  ft_pin(spt->upage, PGSIZE);
   swap_read_frame(frame, spt->block_number);
+  ft_unpin(spt->upage, PGSIZE);
   remove_swap_space(spt->block_number, 1);
   run_if_false(swap_lock_release(), lock_held);
 }
+

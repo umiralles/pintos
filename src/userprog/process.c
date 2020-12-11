@@ -781,6 +781,8 @@ void *allocate_user_page (void* uaddr, enum palloc_flags flags, bool writable) {
     if(spt == NULL) {
       thread_exit();
     }
+
+    ft->pinned = spt->pinned;
     
     /* Initialises new objects in the frame table */
     lock_init(&ft->owners_lock);    

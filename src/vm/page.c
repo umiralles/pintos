@@ -77,6 +77,7 @@ bool create_file_page(void *upage, struct file *file, off_t offset,
   spt->owner = thread_current();
   spt->writable = writable;
   spt->modified = false;
+  spt->pinned = false;
   spt->type = type;
 	
   hash_insert(&thread_current()->sup_table, &spt->elem);
